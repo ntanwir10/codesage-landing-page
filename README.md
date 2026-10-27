@@ -16,7 +16,7 @@ npm run build   # static site in dist/, with the Pagefind search index
 
 ## Deploy
 
-The Vercel project `codesage-docs` is not connected to Git, so a push doesn't redeploy. From this folder, linked through `.vercel/`, run:
+The Vercel project `codesage-docs` is connected to this repository. Each push to `main` deploys to production, and every other branch gets a preview deployment. To deploy without pushing, run this from this folder, which is linked through `.vercel/`:
 
 ```bash
 vercel deploy --prod
