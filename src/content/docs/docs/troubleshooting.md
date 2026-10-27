@@ -48,7 +48,7 @@ Find your symptom in the section for the part that is failing. Messages are quot
 | WebSocket closes with 1008 | Missing or wrong key, or a refused `Host` or `Origin` | Fix the key or `CORS_ORIGINS`. The client does not retry on 1008 |
 | WebSocket closes with 1013 | 200 connections in total, or 20 from one address | The client retries with backoff. Close extra tabs |
 | Search suggestions never appear | The request needs the key, and the dashboard has none or the wrong one. Suggestions also stay empty when Algolia fails | Fix the key. Check the backend log for "Suggestions unavailable" |
-| "Page not found" | The path is not `/`, `/dashboard` or `/repository/:id` | Go to the Home page |
+| "Page not found" | The path is not `/`, `/dashboard`, `/repository/:id` or `/repository/:id/file` | Go to the Home page |
 | `422` on an ID or `skip` | The number is larger than the database allows | Use a smaller number |
 
 ## Indexing failures and partial indexes
@@ -76,7 +76,7 @@ The reason is in `error_message`. The dashboard card, `GET /api/v1/repositories/
 | "... The previous index was removed; reprocess to rebuild it." at the end of a message | A reprocess cleared the old index and then failed | The repository has nothing searchable until you reprocess |
 | Status `completed` with "Partially indexed: N of M files could not be stored" | A database commit failed for a batch of 200 files | Read the log for "Failed to store file batch" |
 | "Partially indexed: N files could not be parsed" | A parser raised an error on those files. They are stored, but have no entities | Read the log for "Failed to parse code file" |
-| "Partially indexed: N files over the 1000-file or 100 MB limit were skipped" | The repository is over a cap. The files that sort last by path are the ones left out | Index a smaller branch or accept it |
+| "Partially indexed: N files over the 1000-file or 100 MB limit were skipped" | The repository is over a cap. Files that yield no entities are left out first, then Markdown, then tests, then source; within a group, the files that sort last by path | Index a smaller branch or accept it |
 | "Partially indexed: the repository is too large to list in full, so some directories were not indexed" | The contents-API walk hit its 300-request cap | Accept it, or index a smaller repository |
 | Stays `processing` with progress 0 | Two runs are already active and this one waits for a slot | Wait |
 | Stays `processing` although the server was killed | The process died before it could record a failure | Start the backend. Start-up marks the row `failed`. Then reprocess |
@@ -93,7 +93,7 @@ The bridge writes to stderr, which Claude Desktop saves in its MCP log. See [Whe
 | "no Keychain password found for ..." (launcher) | `CODESAGE_BASIC_AUTH_USER` is set but its Keychain entry is missing | Re-run the installer with `--basic-auth USER` |
 | "CodeSage backend not reachable at ..." | Backend not running, or `MCP_SERVER_URL` is wrong. `tools/list` still works | `make start-backend`, or correct the URL |
 | "rejected the API key (401)" | `CODESAGE_API_KEY` in the Claude config differs from `backend/.env` | Re-run `make install-claude`, then restart Claude Desktop |
-| "No API key is configured; set CODESAGE_API_KEY in the MCP server's env ..." | The backend needs a key and the Claude config has none | Re-run `make install-claude` |
+| "No API key is configured; set CODESAGE_API_KEY in the MCP server's env ..." | The backend needs a key and the Claude config has none. For a local backend the launcher also found none in `backend/.env` | Re-run `make install-claude` |
 | "The proxy in front of CodeSage rejected the login (401)" | Wrong user, or no Keychain entry for it | Re-run the installer with `--basic-auth USER` and enter the password |
 | "Refusing to send the CodeSage key or login over plain http to ..." | A remote `http://` URL with a key or login | Use `https://`, or set `CODESAGE_ALLOW_INSECURE_AUTH=1` on a trusted network |
 | "refused the request (403)" | The backend runs on another host and its `Host` is not allowed | Add the host to `ALLOWED_HOSTS` on the backend and check `MCP_SERVER_URL` |
@@ -110,6 +110,7 @@ The bridge writes to stderr, which Claude Desktop saves in its MCP log. See [Whe
 | "Repository '...' not found. Available repositories: ..." | The name or ID does not match | Use an ID from `list_repositories` |
 | "Repository '...' is ambiguous: ..." | Two repositories match the name | Use the numeric ID |
 | "url: ..." from `add_repository` | Not an https repository URL (port, credentials, `localhost` and private IPs are refused) | Use the plain https URL |
+| "Can't index host/path: host resolves to a private or loopback address." from `add_repository` | On a host other than github.com, the name resolves to a non-public address, or ("could not be resolved") doesn't resolve | Use a public host. Repositories on a private network can't be indexed |
 | Tools are listed but searches return nothing | No repository has finished indexing | Check `GET /api/v1/repositories/` for status |
 
 ## Docker dev
@@ -151,7 +152,7 @@ The bridge writes to stderr, which Claude Desktop saves in its MCP log. See [Whe
 | Records of one repository vanish after another is deleted | Two databases share one index and both number repositories from 1 | Give each database its own `ALGOLIA_INDEX_NAME`. The Compose files already do |
 | Log says "Algolia indexing still publishing" | A task was not published within 300 s. The records were accepted | Results appear shortly. No action |
 | Log says "Failed to configure Algolia index settings" | `set_settings` failed. The run continues | Check the admin key's permissions |
-| Results appear in the wrong order | Ranking breaks ties with `rank_weight`. Names rank above bodies | See [Search](/docs/concepts/search/#ranking) |
+| Results appear in the wrong order | Ranking breaks ties with `is_test` (source before tests), then `rank_weight`. Names rank above bodies | See [Search](/docs/concepts/search/#ranking) |
 
 ## Where to look
 

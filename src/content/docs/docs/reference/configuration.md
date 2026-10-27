@@ -127,12 +127,12 @@ The dev server proxies `/api`, `/ws` and `/health` to `http://127.0.0.1:8001`, a
 
 ## Bridge environment
 
-The stdio bridge (`python -m codesage_mcp`) does not read `backend/.env`. Claude Desktop sets these from the `env` block of its config. `make install-claude` writes `MCP_SERVER_URL` and `CODESAGE_API_KEY` there.
+The stdio bridge (`python -m codesage_mcp`) does not read `backend/.env`. Claude Desktop sets these from the `env` block of its config. The one exception is the launcher, `mcp_launcher.sh`: when `CODESAGE_API_KEY` is empty, no basic-auth user is set and `MCP_SERVER_URL` is a loopback `http://` URL (or unset), it reads the key from `backend/.env` before starting the bridge. `make install-claude` writes `MCP_SERVER_URL` and `CODESAGE_API_KEY` there.
 
 | Variable | Default | Effect |
 | --- | --- | --- |
 | `MCP_SERVER_URL` | `http://127.0.0.1:8001` | Backend base URL, without `/api/v1`. A trailing `/` is removed. Must start with `http://` or `https://` |
-| `CODESAGE_API_KEY` | unset | Sent as `X-API-Key` |
+| `CODESAGE_API_KEY` | unset | Sent as `X-API-Key`. For a local backend, the launcher fills an empty value from `backend/.env`; a key in the config wins |
 | `CODESAGE_BASIC_AUTH_USER` | unset | Login for the production nginx (HTTP basic auth) |
 | `CODESAGE_BASIC_AUTH_PASSWORD` | unset | Password for that login. The launcher fills it from the macOS Keychain (service `codesage-mcp`) when it is unset |
 | `CODESAGE_ALLOW_INSECURE_AUTH` | unset | `1` allows the key or login over plain `http://` to a non-loopback host. Any other value does nothing |

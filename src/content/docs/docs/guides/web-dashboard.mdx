@@ -12,26 +12,30 @@ import completeShot from '~/assets/screenshots/repository-complete.png';
 import searchShot from '~/assets/screenshots/repository-search.png';
 import dashboardShot from '~/assets/screenshots/dashboard.png';
 
-The dashboard is a React app served by Vite at http://localhost:5173 (or by nginx in the Docker stacks). It has three pages and a 404 page. This guide covers each one, the text you see and what happens behind it.
+The dashboard is a React app served by Vite at http://localhost:5173 (or by nginx in the Docker stacks). It has four pages and a 404 page. This guide covers each one, the text you see and what happens behind it.
 
 <Mermaid caption="How you move through the dashboard." code={`flowchart TB
     home["Home<br/>enter owner/repo"] --> page["Repository page<br/>live progress"]
     dashboard["Dashboard<br/>all repositories"] --> page
     dashboard --> delete["Delete"]
     page --> outcome{"Run ends"}
-    outcome -- "completed or<br/>partially indexed" --> search["Search<br/>with suggestions"]
+    outcome -- "completed or<br/>partially indexed" --> search["Search<br/>with suggestions and filters"]
+    outcome -- "completed or<br/>partially indexed" --> browse["Browse definitions"]
     outcome -- "failed, reason shown" --> reprocess["Reprocess"]
     reprocess --> page
-    search --> github["Open the result at the<br/>exact line on its host"]`} />
+    search --> viewer["File viewer<br/>at the exact lines"]
+    browse --> viewer
+    search --> github["source ↗ opens the result<br/>at the indexed commit on its host"]`} />
 
-The header shows the CodeSage name and two links, **Home** and **Dashboard**. The browser tab title follows the page: `CodeSage - AI-Powered Code Discovery`, `CodeSage - Dashboard` and `CodeSage - Repository <id>`.
+The header shows the CodeSage name and two links, **Home** and **Dashboard**. The browser tab title follows the page: `CodeSage - AI-Powered Code Discovery`, `CodeSage - Dashboard`, `CodeSage - Repository <id>` and `CodeSage - File in repository <id>`.
 
 ## Pages at a glance
 
 | Page | Path | What you can do |
 | --- | --- | --- |
 | Home | `/` | Add a GitHub repository |
-| Repository | `/repository/:id` | Watch progress, search, reprocess, delete |
+| Repository | `/repository/:id` | Watch progress, search, browse definitions, reprocess, delete |
+| File viewer | `/repository/:id/file?path=…&line=…&end=…` | Read an indexed file with the target lines highlighted |
 | Dashboard | `/dashboard` | See all repositories and delete one |
 | Not found | any other path | "Page not found", with a **Go home** button |
 
@@ -100,11 +104,12 @@ The same checks and wording apply to `POST /api/v1/repositories/` ([REST API](/d
 The page for `/repository/:id` shows, from top to bottom:
 
 1. A breadcrumb, `Dashboard / owner/repo`. While the live connection is up it adds `Live updates`.
-2. The header: repository name, description, a source link, `Created <date>`, a status badge and a **Delete** button. The source link reads **View on GitHub** for github.com and **View source** for any other host.
+2. The header: repository name, description, a source link, `Created <date>`, `Indexed at <sha>` (the first 7 characters of the commit the index was built from; hover for the full SHA), a status badge and a **Delete** button. The source link reads **View on GitHub** for github.com and **View source** for any other host. `Indexed at` is missing until a run has fetched the files, and for repositories indexed before commits were recorded.
 3. Four stat cards.
 4. A status card, which depends on the state (see below).
-5. The search box.
-6. **Back to Dashboard** and the source link again.
+5. The search box, with its language and kind filters.
+6. The **Browse definitions** card, once the repository is `completed`.
+7. **Back to Dashboard** and the source link again.
 
 ### Stat cards
 
@@ -127,17 +132,17 @@ The badge is one of **Pending** (gray), **Processing** (blue), **Completed** (gr
 | `failed` | Red | `Processing failed`, `There was an error processing this repository. You can try reprocessing it.`, the reason from `error_message`, and **Reprocess** |
 
 <Aside type="note">
-The green, amber and red cards live on the repository page. On the Dashboard page the status badge carries the color, and a card shows its reason only when the repository failed. A partially indexed repository is a plain green **Completed** badge there. Open it to see the amber note.
+The green, amber and red cards live on the repository page. On the Dashboard page the status badge carries the color. A failed repository's card shows its reason in red, and a partially indexed one keeps the green **Completed** badge with its `Partially indexed` note in amber.
 </Aside>
 
 ### Live progress
 
 Progress reaches the page two ways, and both run at once.
 
-- **WebSocket.** The page subscribes to its repository over `/ws`. The backend pushes a `repository_status` frame at the start of a run, after every batch of 200 files and at the end. The page patches the count in place and refetches the full data when the status changes.
-- **Polling.** While the repository is `pending` or `processing`, the page also reloads the repository, its status and its stats every 3 seconds. Polling stops when the status is `completed` or `failed`, or the repository is gone.
+- **WebSocket.** The page subscribes to its repository over `/ws`. The backend pushes a `repository_status` frame at the start of a run, after every batch of 200 files and at the end. The page patches the counts into the repository it holds, so the progress bar moves with each frame, and refetches the full data when the status changes.
+- **Polling.** While the repository is `pending` or `processing`, the page also reloads the repository and its stats every 3 seconds, or every 15 seconds while the WebSocket is connected, since the frames already arrive then. Polling stops when the status is `completed` or `failed`, or the repository is gone.
 
-If the WebSocket is unavailable, polling still keeps the page current. See [the connection indicator](#connection-indicator).
+If the WebSocket is unavailable, polling still keeps the page current. When the socket connects again, any request that failed in the meantime is retried. See [the connection indicator](#connection-indicator).
 
 ### Search
 
@@ -151,11 +156,12 @@ The search card is titled **AI-Powered Code Search**. The text under the title d
 
 How search behaves:
 
-- **Query.** Type in the box (placeholder `Search your code... (e.g., 'authentication middleware')`) and press **Search**. The button is disabled for an empty query. Search is limited to this repository. There are no filters for language or entity type; ask Claude for those.
+- **Query.** Type in the box (placeholder `Search your code... (e.g., 'authentication middleware')`) and press **Search**. The button is disabled for an empty query, and the box takes at most 170 characters, which always fits the server's 512-byte limit. Search is limited to this repository.
+- **Filters.** Under the box, **Filter by language** offers `All languages` and each language that has indexed entities, and **Filter by kind** offers `All kinds`, `Functions`, `Classes and types`, `Doc sections`, `Terraform blocks` and `Imports`. Changing either one re-runs the current search from its first page. Imports only appear when the kind is `Imports`.
 - **Plain words work.** If nothing matches every word, Algolia drops the words that miss, ignores stop words and plurals and returns the best partial matches.
-- **Suggestions.** After you type at least 3 characters and pause for 300 ms, up to 5 entity names appear in a list under the box. Click one to run that search. The list closes when you search or leave the box. Suggestions come from the same Algolia index; if the request fails, no list appears.
+- **Suggestions.** After you type at least 3 characters and pause for 300 ms, up to 5 entity names appear in a list under the box. Click one, or move through the list with the Up and Down arrow keys and press Enter, to run that search. Escape closes the list, and so does searching or leaving the box. Suggestions come from the same Algolia index; if the request fails, no list appears.
 - **Results.** The dashboard asks for 10 results per page. The summary reads `Found N results for "query"`. When there is more than one page you get **Previous**, `Page X of Y` and **Next**. A failed page change keeps the current results.
-- **Each result.** The entity name is a link to the exact lines on the host, for example `https://github.com/owner/repo/blob/main/src/app.py#L10-L25`. After it come a type badge (`function`, `class`, `import`, `doc_section` or `terraform_block`), a description, the file path, the language, `Lines 10-25`, the signature (when the snippet doesn't already start with it) and a snippet. If the host has no known link format, the name is plain text.
+- **Each result.** The entity name opens the [file viewer](#file-viewer) at the result's lines. A small **source ↗** link after it opens the exact lines on the host at the indexed commit, for example `https://github.com/owner/repo/blob/<sha>/src/app.py#L10-L25`; it is left out when the host has no known link format. Then come a type badge (`function`, `class`, `import`, `doc_section` or `terraform_block`), a description, the file path, the language, `Lines 10-25`, the signature (when the snippet doesn't already start with it) and a snippet.
 - **No results.** `No results found` and `Try different keywords or a more specific query.`
 - **Loading.** `Searching your codebase...`
 - **Errors.** A red `Connection Error` box means the browser couldn't reach the server. An orange `Search failed` box carries a tool message, such as `Search is unavailable; try again later.` An orange `Service Error` box carries an HTTP error message. The **✕** button (labelled "Dismiss error") closes it.
@@ -163,6 +169,14 @@ How search behaves:
 <Aside type="note">
 Dashboard searches go through the same `search_code` tool endpoint Claude uses, so they share its limit of 30 calls per minute per client address. Suggestions have their own limit of 100 per minute.
 </Aside>
+
+### Browse definitions
+
+Once the repository is `completed`, a **Browse definitions** card under the search lists every indexed definition, read from SQLite through the `list_definitions` tool, in file and line order.
+
+- **Filters.** A name box (placeholder `Filter by name...`) matches any part of the name, ignoring case. It applies 300 ms after you stop typing, because each change is a tool call and those are limited to 30 a minute. A kind select offers `All kinds` and the same kinds as search.
+- **List.** Up to 100 definitions. The line above them reads `Showing N of M definitions` when more match, or `M definitions`. Each entry shows the name, which opens the [file viewer](#file-viewer) at its lines, then `<type> · <path>:<line>`.
+- **Errors.** A failed request shows its message in red. The list keeps the previous results while the next filter loads.
 
 ### Reprocess
 
@@ -178,7 +192,7 @@ A reprocess replaces the old data only after the new files are fetched, so a tra
 
 ### Delete
 
-**Delete** opens a dialog titled **Delete Repository**: `Are you sure you want to delete "owner/repo"? This action cannot be undone and will remove all associated data including search indexes and files.` The buttons are **Cancel** and **Delete Repository** (`Deleting...` while it runs). Escape or a click outside the dialog cancels, unless a delete is in progress.
+**Delete** opens a dialog titled **Delete Repository**: `Are you sure you want to delete "owner/repo"? This action cannot be undone and will remove all associated data including search indexes and files.` The buttons are **Cancel** and **Delete Repository** (`Deleting...` while it runs). Escape or a click outside the dialog cancels, unless a delete is in progress. The dialog is modal (`aria-modal`): focus starts on **Cancel**, Tab and Shift+Tab stay inside the dialog, and when it closes, focus returns to the button that opened it.
 
 | Result | Toast |
 | --- | --- |
@@ -200,6 +214,17 @@ Error toasts stay for 8 seconds and carry the server's message. A repository can
 
 If a background refresh fails but data is already on screen, the page keeps the old data.
 
+## File viewer
+
+The file viewer shows one stored file at `/repository/:id/file?path=<path>&line=<n>&end=<m>`. Result names, the **Browse definitions** list and the viewer's own outline all open it. The text comes from SQLite through the `get_file` tool, so it is the file as it was indexed, not the live branch.
+
+- **Header.** **← Back to repository**, the file path, and `<language> · lines A–B of N`.
+- **Lines.** The viewer shows 400 lines at a time, the most `get_file` returns in one call. With a target line, the window starts 20 lines above it, the target lines (`line` to `end`) are highlighted, and the page scrolls them into view. **↑ Previous 400 lines** and **↓ Next 400 lines** move the window.
+- **In this file.** A side list of the file's definitions, each linking to its lines in the viewer, or `No definitions indexed.`
+- **Errors.** A `get_file` failure shows its message in red, such as a file that is not found, with close paths suggested. Without a `path`, the title reads `No file selected`.
+
+Each window and the outline are tool calls, so they count toward the limit of 30 a minute.
+
 ## Dashboard
 
 <Shot src={dashboardShot} alt="The Repository Dashboard with summary counters (2 total, 1 completed, 0 processing, 1 failed) and two repository cards, one failed with its reason shown and one completed." caption="The Dashboard with one failed and one completed repository. The failed card shows its error_message." />
@@ -208,8 +233,8 @@ The Dashboard page lists every repository.
 
 - **Header.** `Repository Dashboard`, `Manage and explore your code repositories with real-time updates`, and an **Add Repository** button that goes to Home.
 - **Four tiles.** `Total Repositories`, `Completed`, `Processing` (pending and processing together) and `Failed`.
-- **The list.** Under `Your Repositories`, one card per repository, with `N repository processing` or `N repositories processing` when runs are active. Each card shows the name, description, status badge, **View Details** and a trash button (labelled `Delete <name>`). The body shows the files, lines, language (`Unknown` if none) and branch (`default` if none). A failed repository shows its reason in red. A processing repository shows a progress bar with `N / M files processed` and a pulsing `Live updates`, or an indeterminate bar before the first batch. At the bottom, a source link reads **View on GitHub →** on every card, whichever host the repository comes from.
-- **Refreshing.** While any repository is `pending` or `processing` the list reloads every 3 seconds, and the page subscribes over the WebSocket to each active repository. Otherwise the list is considered fresh for 30 seconds, which picks up repositories added from another tab or by Claude.
+- **The list.** Under `Your Repositories`, one card per repository, with `N repository processing` or `N repositories processing` when runs are active. Each card shows the name, description, status badge, **View Details** and a trash button (labelled `Delete <name>`). The body shows the files, lines, language (`Unknown` if none) and branch (`default` if none). A failed repository shows its reason in red. A completed repository that left files out shows its `Partially indexed` note in amber. A processing repository shows a progress bar with `N / M files processed` and a pulsing `Live updates`, or an indeterminate bar before the first batch. At the bottom, a source link reads **View on GitHub →** for github.com and **View source →** for any other host.
+- **Refreshing.** While any repository is `pending` or `processing` the list reloads every 3 seconds (every 15 seconds while the WebSocket is connected), and the page subscribes over the WebSocket to each active repository. Otherwise the list is considered fresh for 30 seconds, which picks up repositories added from another tab or by Claude.
 - **Delete.** The same dialog as on the repository page, ending `...including search indexes.` The same toasts apply. A 404 is treated as success and the list refreshes.
 - **No reprocess here.** Open the repository and use its card.
 
@@ -246,6 +271,7 @@ Toasts appear at the top right, can be dismissed by clicking them or the ✕, an
 | --- | --- | --- |
 | `Repository added` | Green | A repository was created |
 | `Repository analysis complete`, `<name> is ready for search.` | Green, 6 s | A run reached `completed` while you were subscribed. Shown once per change. |
+| `Repository partially indexed`, `<name>: Partially indexed: ...` | Yellow, 8 s | A run reached `completed` but left files out. Shown instead of the green toast. |
 | `Repository analysis failed` with the reason | Red, 8 s | A run reached `failed` |
 | `API key rejected` | Red, 10 s | HTTP 401 or WebSocket close 1008. It says to set `VITE_CODESAGE_API_KEY` to the key the backend expects, then rebuild or restart the frontend. It fires once, then stays quiet until a request succeeds. |
 | `Reprocessing started`, `Reprocessing not started`, `Failed to start reprocessing` | Green, yellow, red | See [Reprocess](#reprocess) |

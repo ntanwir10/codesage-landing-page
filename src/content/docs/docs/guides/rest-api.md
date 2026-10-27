@@ -62,18 +62,19 @@ This response is illustrative. Creating a repository is a write call, so it was 
   "branch": null,
   "language": null,
   "framework": null,
+  "commit_sha": null,
   "status": "pending",
   "error_message": null,
   "total_files": 0,
   "processed_files": 0,
   "total_lines": 0,
-  "created_at": "2026-10-26T14:00:02",
+  "created_at": "2026-10-26T14:00:02Z",
   "updated_at": null,
   "processed_at": null
 }
 ```
 
-The backend checks the repository on GitHub before it creates anything (10 seconds, one attempt). It then starts indexing in the background and returns at once. Note the `id`. You use it in every later step.
+The backend checks the repository on GitHub before it creates anything (10 seconds, one attempt). It then starts indexing in the background and returns at once. `commit_sha` stays `null` until the run resolves the branch to a commit; times are UTC, with a `Z` suffix. Note the `id`. You use it in every later step.
 
 To index a branch, add `"branch": "release"` or use a branch URL such as `https://github.com/pmndrs/zustand/tree/release`. An empty `"branch": ""` means the default branch.
 
@@ -213,7 +214,7 @@ curl -sS "$BASE/api/v1/repositories/?status=completed&limit=20"
 
 The response is an array of repository objects, ordered by ID. You can filter by `language` and `status`, and page with `skip` and `limit` (1 to 500).
 
-Real output for that request, from a backend holding one completed repository:
+Real output for that request, from a backend holding one completed repository. It was indexed before commits were recorded, so `commit_sha` is `null`:
 
 ```json title="Expected response"
 [
@@ -225,14 +226,15 @@ Real output for that request, from a backend holding one completed repository:
     "language": "typescript",
     "framework": "react",
     "id": 2,
+    "commit_sha": null,
     "status": "completed",
     "error_message": null,
     "total_files": 120,
     "processed_files": 120,
     "total_lines": 25117,
-    "created_at": "2026-10-26T23:32:19",
-    "updated_at": "2026-10-26T23:32:50",
-    "processed_at": "2026-10-26T23:32:50.170474"
+    "created_at": "2026-10-26T23:32:19Z",
+    "updated_at": "2026-10-26T23:32:50Z",
+    "processed_at": "2026-10-26T23:32:50.170474Z"
   }
 ]
 ```
@@ -264,10 +266,17 @@ curl -sS $BASE/api/v1/repositories/2/stats
     "typescript": 34,
     "yaml": 13
   },
+  "entities_by_language": {
+    "javascript": 64,
+    "markdown": 398,
+    "typescript": 563
+  },
   "language": "typescript",
   "framework": "react"
 }
 ```
+
+`entities_by_language` counts entities per file language, so it lists only the languages that have any. The dashboard offers those as its search language filter.
 
 To fetch one repository on its own, use `GET /api/v1/repositories/2`.
 
@@ -324,6 +333,8 @@ Real output, trimmed: the `snippet` strings are shortened with `…`.
   "error": null
 }
 ```
+
+The links say `HEAD` because this repository was indexed before commits were recorded. After a reprocess they carry the indexed commit's SHA instead, so their line numbers stay right after the branch moves on.
 
 The other tools work the same way. This one reads a file:
 

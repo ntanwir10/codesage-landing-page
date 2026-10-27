@@ -96,7 +96,7 @@ cd frontend && npm test          # vitest run (single pass)
 cd frontend && npx vitest        # watch mode
 ```
 
-Vitest uses jsdom with globals on, and `src/test/setup.ts` as its setup file. Tests sit next to the code they cover as `*.test.ts` or `*.test.tsx`: the three pages, `ErrorBoundary`, `services/api` and `services/websocket`, and the `lib` helpers for errors, polling and the query client. They are unit tests, with no browser and no backend.
+Vitest uses jsdom with globals on, and `src/test/setup.ts` as its setup file. Tests sit next to the code they cover as `*.test.ts` or `*.test.tsx`: the four pages, the `useRealtimeStatus` hook, `ErrorBoundary`, `services/api` and `services/websocket`, and the `lib` helpers for errors, polling and the query client. They are unit tests, with no browser and no backend.
 
 ## Lint and build
 

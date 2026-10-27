@@ -63,7 +63,7 @@ The file must have a known extension. Only `.c` and `.cpp` count for C and C++, 
 
 ### How big a repository can I index?
 
-At most 1000 files and 100 MB per repository, with each file under 1 MB. Files are sorted by path and the first ones are kept. A body stored in Algolia is capped at 2000 characters per entity. For a GitHub repository too large for one tree call, the backend lists directories through the contents API, up to 300 directories. Anything beyond the limits is left out and the repository is marked partially indexed.
+At most 1000 files and 100 MB per repository, with each file under 1 MB. Source files are kept first, then tests, then Markdown, then files that yield no entities, each group in path order. A body stored in Algolia is capped at 2000 characters per entity. For a GitHub repository too large for one tree call, the backend lists directories through the contents API, up to 300 directories. Anything beyond the limits is left out and the repository is marked partially indexed.
 
 ### Why does my repository say "Partially indexed"?
 
@@ -98,7 +98,7 @@ A reprocess fetches first and clears the old records only after the fetch succee
 Your code touches these places, and the backend code contacts nothing else:
 
 - **GitHub.** The backend downloads files from `api.github.com` and `raw.githubusercontent.com`, with your token if set. Other hosts are cloned with `git`.
-- **Algolia.** One record per entity is sent to your index. A record holds `objectID`, `repository_id`, `file_path`, `entity_type`, `entity_name`, `description`, `parameters`, `return_type`, `line_start`, `line_end`, `language`, `signature`, `content`, `rank_weight`, `parameter_count` and `lines_of_code`. `content` is the signature plus at most 2000 characters of the entity body, and each record is trimmed to 9000 bytes. Whole files are not sent to Algolia.
+- **Algolia.** One record per entity is sent to your index. A record holds `objectID`, `repository_id`, `file_path`, `entity_type`, `entity_name`, `description`, `parameters`, `return_type`, `line_start`, `line_end`, `language`, `signature`, `content`, `rank_weight`, `is_test`, `parameter_count` and `lines_of_code`. `content` is the signature plus at most 2000 characters of the entity body, and each record is trimmed to 9000 bytes. Whole files are not sent to Algolia.
 - **Your local SQLite file.** It holds the full text of every indexed file at `backend/codesage.db`.
 - **Claude.** What a tool returns, such as snippets or numbered file lines, becomes part of your conversation with Claude.
 

@@ -22,7 +22,7 @@ These are limits of the current code, not bugs waiting for a fix. Each row says 
 
 | Limitation | Why | Workaround |
 | --- | --- | --- |
-| **At most 1000 files and 100 MB per repository, and each file under 1 MB.** Files that sort last by path are dropped. | A run holds every file in memory, and two runs can be active. The caps are constants in `FileSelector` | Index a smaller branch or a fork, or change `max_files` and `max_total_bytes` in `backend/app/services/github_service.py` and watch memory. The run says what it skipped in `error_message` |
+| **At most 1000 files and 100 MB per repository, and each file under 1 MB.** Source files are kept first, then tests, then Markdown, then files that yield no entities, each group by path; what comes last is dropped. | A run holds every file in memory, and two runs can be active. The caps are constants in `FileSelector` | Index a smaller branch or a fork, or change `max_files` and `max_total_bytes` in `backend/app/services/github_service.py` and watch memory. The run says what it skipped in `error_message` |
 | **Very large GitHub repositories are listed in part.** | When GitHub truncates the tree, a breadth-first walk of the contents API stops after 300 directory requests, to protect the hourly API quota | Accept it, or index a smaller repository. The run says "too large to list in full" |
 | **Only 25 file extensions are indexed.** | The extension map in `github_service.py` is the allow list | See [Supported languages](/docs/reference/languages/) |
 | **C and C++ headers are not indexed.** `.h`, `.hpp` and `.cc` are not in the map. | The map has `c` and `cpp` only | None short of adding the extensions |
@@ -46,7 +46,7 @@ These are limits of the current code, not bugs waiting for a fix. Each row says 
 | **Private repositories work on github.com only**, with one server-wide `GITHUB_TOKEN`. | The token belongs to the server, so every user sees what it can read | Use a token with the narrowest access you can |
 | **Source links exist for GitHub, GitLab and Bitbucket only.** GitLab means `gitlab.com` or a host starting with `gitlab.`. | The link format is host specific | Other hosts get results without a `url` |
 | **Other hosts need `git` in the image or on the machine.** | The clone uses the git command line | Both backend images install it |
-| **The URL check reads the URL text and does not resolve DNS.** | It refuses `localhost`, `.localhost` names and non-public IP literals | Run CodeSage where it should not reach internal hosts, or restrict egress |
+| **The URL check reads the URL text and does not resolve DNS.** On other hosts, git's redirects are followed unchecked. | The URL check refuses `localhost`, `.localhost` names and non-public IP literals. For other hosts, the git source also resolves the name, refuses any non-public address and pins git to the checked one. But redirects stay on, because gitlab.com answers `/group/repo` with a `301` to `/group/repo.git`, so a hostile public host could redirect git to an internal address | Run CodeSage where it should not reach internal hosts, or restrict egress with a proxy that refuses private addresses |
 
 ## Security model
 
@@ -64,7 +64,7 @@ These are limits of the current code, not bugs waiting for a fix. Each row says 
 | --- | --- | --- |
 | **Searching all repositories includes ones being reprocessed.** | A named repository must be `completed`, but a search without a name only filters on the query | Name the repository |
 | **A reprocess briefly leaves a repository with no records.** | The old records are deleted before the new ones are indexed | Wait for `completed` |
-| **Ranking is relevance first.** `rank_weight` only breaks ties. | It is the index's `customRanking` | See [Search](/docs/concepts/search/#ranking) |
+| **Ranking is relevance first.** `is_test` and `rank_weight` only break ties. | They are the index's `customRanking` | See [Search](/docs/concepts/search/#ranking) |
 | **Plain-words queries are English.** `queryLanguages` is `["en"]`. | Stop-word and plural rules are English | Use keywords in other languages |
 | **Delete returns before Algolia finishes.** | Algolia applies tasks in order, so a later re-add still lands after the delete | None needed |
 | **Suggestions need at least 2 characters** and return nothing on any error. | A broken suggestion box should not break the page | Use search |
@@ -77,7 +77,7 @@ These are limits of the current code, not bugs waiting for a fix. Each row says 
 | **The backend must be running.** The bridge does not start it. | The bridge holds no data | `make start-backend` |
 | **`get_file` returns at most 400 lines and 100,000 characters per call.** | A minified file could otherwise return megabytes | Call again with a later `start_line` |
 | **`find_patterns` has time limits.** A regex gets 1 s per file and 10 s per call. Files over 1,000,000 characters are skipped. A pattern is at most 200 characters. | The `regex` module's timeouts guard against catastrophic patterns | Use a literal search, which has no time limit, or a narrower `path_glob` |
-| **`list_definitions` returns at most 500 definitions** and `search_code` at most 50 per page. | Argument limits in the schema | Page through, or narrow the filters |
+| **`list_definitions` returns at most 500 definitions** and `search_code` at most 50 per page. A `search_code` query is at most 512 bytes. | Argument limits in the schema | Page through, or narrow the filters |
 | **The files resource lists the first 5000 files.** | `MAX_RESOURCE_FILES` | `truncated` tells you |
 | **Tools and resources only.** No prompts. | The server declares `prompts: false` | None |
 | **`--basic-auth` and the Keychain are macOS only.** | They use the `security` command | Set `CODESAGE_BASIC_AUTH_PASSWORD` in the bridge's `env` |

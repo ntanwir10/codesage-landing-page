@@ -6,18 +6,18 @@ description: How CodeSage builds Algolia records, configures the index, ranks re
 import { Aside } from '@astrojs/starlight/components';
 import Mermaid from '~/components/Mermaid.astro';
 
-CodeSage searches with Algolia. You bring your own Algolia application: there is no shared or hosted index. Each parsed entity (a function, a class, an import, a Markdown section or a Terraform block) becomes one Algolia record. The `search_code` tool queries those records. Every other tool reads SQLite, because they need exact file text and Algolia only holds short summaries.
+CodeSage searches with Algolia. You bring your own Algolia application: there is no shared or hosted index. Each parsed entity (a function, a class, an import, a Markdown section or a Terraform block) becomes one Algolia record. The `search_code` tool queries those records, and leaves imports out unless you ask for them. Every other tool reads SQLite, because they need exact file text and Algolia only holds short summaries.
 
 `AlgoliaService` in [`backend/app/services/algolia_service.py`](https://github.com/ntanwir10/codesage-algolia-challenge/blob/master/backend/app/services/algolia_service.py) builds the records and applies the settings. The tool code in [`backend/app/services/mcp_tools.py`](https://github.com/ntanwir10/codesage-algolia-challenge/blob/master/backend/app/services/mcp_tools.py) shapes the results.
 
-<Mermaid caption="One search_code call. Algolia ranks; SQLite is only asked for repository details such as the URL and branch used to build links." code={`flowchart TD
+<Mermaid caption="One search_code call. Algolia ranks; SQLite is only asked for repository details such as the URL and indexed commit used to build links." code={`flowchart TD
     call["search_code(query, repository, language, entity_type, limit, page)"] --> repo{"repository given?"}
     repo -- "yes" --> ready{"status completed?"}
     ready -- "no" --> refuse["Tool error: failed reason<br/>or indexing progress"]
     ready -- "yes" --> cfg
     repo -- "no" --> cfg{"Algolia configured?"}
     cfg -- "no" --> notcfg["Tool error: search not configured"]
-    cfg -- "yes" --> query["Algolia query in a worker thread<br/>filters AND-ed, partial matches allowed"]
+    cfg -- "yes" --> query["Algolia query in a worker thread<br/>filters AND-ed, imports left out<br/>unless entity_type is import,<br/>partial matches allowed"]
     query -- "fails" --> unavailable["Tool error: Search is unavailable"]
     query -- "hits" --> shape["Trim fields, build source links"]
     shape --> out["query, repository, total_hits, page, pages, results"]
@@ -42,6 +42,7 @@ CodeSage searches with Algolia. You bring your own Algolia application: there is
 | `signature` | The definition line, capped at 500 characters |
 | `content` | Signature plus the body, with at most 2000 characters of body |
 | `rank_weight` | A number used to break ties. See [Ranking](#ranking) |
+| `is_test` | `true` when the file is a test. See [Ranking](#ranking) |
 | `parameter_count` | `len(parameters)`, or 0 |
 | `lines_of_code` | `line_end - line_start + 1`, never below 1 |
 
@@ -85,6 +86,7 @@ This is a function record for an illustrative Python function at lines 42 to 48 
   "signature": "def refresh_token(session, token: str) -> str:",
   "content": "def refresh_token(session, token: str) -> str:\n    \"\"\"Return a new access token for a refresh token.\"\"\"\n    record = session.get(RefreshToken, token)\n    if record is None or record.expired:\n        raise InvalidToken(\"refresh token is not valid\")\n    record.rotate()\n    return record.access_token",
   "rank_weight": 2,
+  "is_test": false,
   "parameter_count": 2,
   "lines_of_code": 7
 }
@@ -95,6 +97,7 @@ Reading it field by field:
 - `description` is the parser's label (`Python function: refresh_token`) plus the first line of the docstring. A method gets `Python method: Class.name`.
 - `parameters` and `return_type` come from Python's `ast`. Other languages take them from the tree-sitter parameter list and return field.
 - `rank_weight` is 2 because the type is `function`.
+- `is_test` is `false` because `src/auth/tokens.py` is neither under a test folder nor named like a test.
 - `lines_of_code` is 48 - 42 + 1 = 7, and `parameter_count` is the length of `parameters`.
 - `content` repeats the signature only once, because the body already starts with it.
 
@@ -106,7 +109,8 @@ Reading it field by field:
 | --- | --- | --- |
 | `searchableAttributes` | `entity_name`, `description`, `content`, `parameters`, `file_path`, in that order | Order sets priority. A match in the name beats a match in the body |
 | `attributesForFaceting` | `filterOnly(repository_id)`, `entity_type`, `language`, `file_path` | Lets the filters in a query work. `filterOnly` skips facet counts for the ID |
-| `customRanking` | `desc(rank_weight)` | Breaks relevance ties, classes first |
+| `camelCaseAttributes` | `entity_name` | Part of a camelCase name matches: `WithState` finds `TestShallowWithState`, and `getUserById` is also found by `user` and `ById` |
+| `customRanking` | `asc(is_test)`, `desc(rank_weight)` | Breaks relevance ties: source before tests, then classes first |
 | `highlightPreTag`, `highlightPostTag` | `<mark>` and `</mark>` | Highlight markers in Algolia's highlight output |
 | `hitsPerPage` | 20 | Index default. `search_code` sends its own value |
 | `maxValuesPerFacet` | 100 | Cap on facet values returned |
@@ -115,7 +119,11 @@ The settings task is not waited on. Algolia applies an index's tasks in order, a
 
 ## Ranking
 
-Algolia ranks hits by its built-in relevance criteria first (typos, words matched, proximity, which attribute matched and exactness). `customRanking` only breaks ties between hits that are otherwise equal, which is why `rank_weight` is a tie-breaker and not a boost.
+Algolia ranks hits by its built-in relevance criteria first (typos, words matched, proximity, which attribute matched and exactness). `customRanking` only breaks ties between hits that are otherwise equal, which is why `is_test` and `rank_weight` are tie-breakers and not boosts.
+
+The first tie-breaker is `is_test`: among equally relevant hits, the code under test comes before its tests. `is_test` is `true` when any folder in the file's path is named `test`, `tests`, `__tests__`, `spec`, `specs`, `__mocks__`, `e2e` or `testing` (in any letter case), or when the file name looks like a test: `test_*.py`, `*_test.py`, `*_test.go`, `*.test.*` and `*.spec.*` for JavaScript and TypeScript, `*Test.java`, `*Tests.java` and the same for `.cs`, and `*_spec.rb`.
+
+The second is `rank_weight`:
 
 | `entity_type` | `rank_weight` |
 | --- | --- |
@@ -128,7 +136,7 @@ Algolia ranks hits by its built-in relevance criteria first (typos, words matche
 On a tie, a class beats a function or a Terraform block, a doc section comes next and an import comes last. The reasoning: if you search `UserService`, the class definition should come before every `import UserService` line that matches equally well.
 
 <Aside type="note">
-The relevance order described here is Algolia's own behaviour. CodeSage only sets `searchableAttributes` and `customRanking`. The search code does not change the other ranking criteria.
+The relevance order described here is Algolia's own behaviour. CodeSage only sets `searchableAttributes`, `camelCaseAttributes` and `customRanking`. The search code does not change the other ranking criteria.
 </Aside>
 
 ## Query parameters
@@ -147,6 +155,8 @@ Every `search_code` query sends these parameters:
 
 These five exist for one reason: Claude often sends a question in plain words, such as "where is the store created". A strict full-text match would return nothing for that. With `allOptional`, the query degrades gracefully into a keyword search.
 
+The query itself is at most 512 bytes of UTF-8, because Algolia rejects longer ones. A longer query is refused as invalid arguments (`query is too long; the limit is 512 bytes`) before Algolia is asked. The dashboard's search box stops at 170 characters, which always fits.
+
 ### Filters
 
 Filters are joined with `AND`. All three are optional.
@@ -155,7 +165,9 @@ Filters are joined with `AND`. All three are optional.
 | --- | --- | --- |
 | Repository | `repository_id=12` | A numeric comparison. In a filters string, the facet form `repository_id:12` matches nothing, because the value is numeric |
 | Language | `language:"python"` | Value is quoted |
-| Entity type | `entity_type:"function"` | Value is quoted |
+| Entity type | `entity_type:"function"` | Value is quoted. Without an entity type, `NOT entity_type:"import"` is added instead |
+
+Imports are searched only when you ask for `entity_type: "import"`. An import line repeats every name it imports, so without that filter imports would crowd out the definitions.
 
 The language and entity type values go through `_escape_filter_value`, which escapes backslashes and double quotes. A value cannot close the quote and add a filter clause of its own.
 
@@ -171,7 +183,7 @@ Each hit becomes a result with these fields: `entity_name`, `entity_type`, `file
 | `signature` | 300 characters, or `null` |
 | `description` | 300 characters, or `null` |
 
-The `url` is a permalink built from the repository's stored URL, the branch (or `HEAD` when none is set), the file path and the line range. Each path segment is percent-encoded.
+The `url` is a permalink built from the repository's stored URL, a ref, the file path and the line range. The ref is the commit the index was built from (`repositories.commit_sha`), so the line numbers stay right after the branch moves on. A repository indexed before commits were recorded uses its branch, or `HEAD` when none is set, until it is reprocessed. Each path segment is percent-encoded.
 
 | Host | Link format |
 | --- | --- |
@@ -180,14 +192,14 @@ The `url` is a permalink built from the repository's stored URL, the branch (or 
 | bitbucket.org | `https://<host>/<path>/src/<ref>/<file>#lines-<start>:<end>` |
 | Any other host | `null`. No link is built, because the link format is not known |
 
-Without a start line, the link points at the file with no line anchor. The dashboard labels the link "View on GitHub", or "View source" for another host.
+Without a start line, the link points at the file with no line anchor. In the dashboard, a result's name opens the indexed file in the file viewer, and a **source ↗** link next to it opens this `url`.
 
 ## Suggestions
 
 `GET /api/v1/ai/search/suggestions` drives the dashboard's auto-complete. It needs the API key (it searches all repositories, like `search_code`) and is limited to 100 requests a minute.
 
 - A query shorter than 2 characters (after trimming) returns an empty list.
-- It asks Algolia for twice the requested limit (the limit is 1 to 20, default 10) and returns the distinct `entity_name` values in rank order.
+- It asks Algolia for twice the requested limit (the limit is 1 to 20, default 10) and returns the distinct `entity_name` values in rank order. Like `search_code` without an entity type, it leaves imports out.
 - Any failure returns an empty list, because a broken suggestion box should never break the page.
 
 ## Waits and timeouts

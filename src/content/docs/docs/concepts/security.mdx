@@ -32,7 +32,7 @@ The attacks the design answers, and the control for each:
 | Someone calls a write endpoint directly | The API key (`X-API-Key`), compared in constant time |
 | The key leaks through a URL or access log | WebSocket keys travel in a subprotocol, never in the URL |
 | An error message leaks SQL, file contents or the Algolia host | Errors are replaced by fixed or short messages. Details go to the log |
-| A repository URL points the server at an internal address | URL validation refuses credentials, ports, `localhost` and non-public IP literals |
+| A repository URL points the server at an internal address | URL validation refuses credentials, ports, `localhost` and non-public IP literals. For hosts other than github.com, the name must also resolve to public addresses only, and git is pinned to the checked address. A redirect from a public host is still followed unchecked |
 | A cloned repository contains a symlink to a file on the server | The tree walk never lists or follows symlinks |
 | A flood of requests or WebSocket connections | Per-client rate limits, connection caps and a 2 MB request body limit in nginx |
 
@@ -212,10 +212,13 @@ A repository URL is the one piece of input that makes the server contact somewhe
 - The path has an owner and a repository, each made only of letters, digits, `_`, `.` and `-`. `.` and `..` are refused, because `..` as an owner would turn `api.github.com/users/<owner>` into `api.github.com/user`.
 - A branch has no `..` segment, no NUL character and does not start with `-`, so it can never read as an option to git or step out of an API path.
 
-The validator reads the URL text. It does not resolve DNS, so it cannot see where a public-looking hostname points.
+The validator reads the URL text. It does not resolve DNS, so it cannot see where a public-looking hostname points. For hosts other than github.com, the git source checks that before git runs (next list).
 
 **Git sandbox** (hosts other than github.com):
 
+- Before the check and before the clone, the host name is resolved. If it does not resolve, or any address is not public (private, loopback, link-local and so on), the request is refused with `422`, for example "Can't index host/path: host resolves to a private or loopback address." This catches a name such as `10.0.0.1.nip.io` that points at a private address.
+- git is pinned to the checked address with `-c http.curloptResolve=<host>:443:<ip>` (IPv4 preferred), so it never resolves the name again. A DNS answer that changes in between (rebinding) cannot send it elsewhere.
+- Redirects are still followed, because gitlab.com answers `/group/repo` with a `301` to `/group/repo.git`. git follows that redirect without the address check, so a hostile public host could still point it at an internal address. This is a known gap; route the backend through an egress proxy that refuses private addresses if it matters.
 - Git runs through `create_subprocess_exec`, so no shell parses the URL or branch. The URL follows a `--` separator.
 - The environment is rebuilt from scratch: `HOME` and the global config point at `/dev/null`, system config is off, `GIT_TERMINAL_PROMPT=0`, and stdin is closed. Only `PATH` and a few TLS and proxy variables (`SSL_CERT_FILE`, `SSL_CERT_DIR`, `GIT_SSL_CAINFO`, `HTTPS_PROXY`, `https_proxy`, `NO_PROXY`) are passed through.
 - The credential helper is blanked and only https is allowed (`protocol.allow=never`, then https allowed), whatever the user's git config says.
@@ -224,7 +227,7 @@ The validator reads the URL text. It does not resolve DNS, so it cannot see wher
 - A clone keeps symlinks as real links. The tree walk skips every symlink without following or listing it, and does not descend into `.git` or denied directories. A repository cannot make the server read a file outside the clone.
 - The clone goes into a temporary directory that is always removed.
 
-**GitHub** uses the REST API. Each owner, repository and branch is percent-encoded when it goes into a URL, and downloads come from `raw.githubusercontent.com`.
+**GitHub** uses the REST API. Each owner, repository and branch is percent-encoded when it goes into a URL, and downloads come from `raw.githubusercontent.com`, at the commit the branch pointed to when the run started.
 
 ## Hardening checklist
 
