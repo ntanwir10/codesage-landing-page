@@ -3,7 +3,7 @@ title: WebSocket reference
 description: The /ws endpoint that pushes live repository status, with authentication, connection caps, close codes, every frame type and a JavaScript client.
 ---
 
-The backend pushes indexing progress over a WebSocket at `/ws`. The dashboard uses it to update progress bars without waiting for its 3-second poll. You can use it from any WebSocket client. For the REST side of the same data, see [REST API](/docs/reference/rest-api/#get-apiv1repositoriesrepository_idstatus).
+The backend pushes indexing progress over a WebSocket at `/ws`. The dashboard uses it to update progress bars without waiting for its next poll (every 3 seconds, or 15 seconds while the socket is connected). You can use it from any WebSocket client. For the REST side of the same data, see [REST API](/docs/reference/rest-api/#get-apiv1repositoriesrepository_idstatus).
 
 The endpoint is `ws://127.0.0.1:8001/ws` for a local install. Behind the production nginx it is `wss://<your-host>/ws`. Source: [`websocket_service.py`](https://github.com/ntanwir10/codesage-algolia-challenge/blob/master/backend/app/services/websocket_service.py).
 

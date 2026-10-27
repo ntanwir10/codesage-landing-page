@@ -130,13 +130,13 @@ Why these numbers:
 
 3. **Check Algolia.** The endpoints already refuse a missing configuration, so this only fails a run when the credentials went away after it was scheduled. The run fails with "Algolia credentials not configured. Set ALGOLIA_APP_ID and ALGOLIA_ADMIN_API_KEY." A repository without a URL fails with "Repository URL is required for processing".
 
-4. **List.** The branch is the repository's own, or the one in the URL, or the default branch the GitHub API reports. For github.com, one recursive git trees call lists the files. For other hosts a shallow clone is walked instead, and step 6 does not apply.
+4. **List.** The branch is the repository's own, or the one in the URL, or the default branch the GitHub API reports. For github.com, the branch is first resolved to a commit (`GET /repos/<owner>/<repo>/branches/<branch>`), then one recursive git trees call lists the files at that commit. For other hosts a shallow clone is walked instead, its commit is read with `git rev-parse HEAD`, and step 6 does not apply. The commit is stored in the repository's `commit_sha`, and source links point at it.
 
-5. **Select.** The deny list, the extension filter and the size filter run first. The survivors are sorted by path and kept in order until the file count or byte cap is reached. The rest count as skipped. See [File selection rules](#file-selection-rules).
+5. **Select.** The deny list, the extension filter and the size filter run first. The survivors are ordered source files first, then test files, then Markdown, then files that yield no entities, each group by path, and kept in that order until the file count or byte cap is reached. The rest count as skipped. See [File selection rules](#file-selection-rules).
 
 6. **Truncated trees.** If GitHub marks the tree as truncated, the contents API is walked instead. See [The truncated-tree walk](#the-truncated-tree-walk).
 
-7. **Download.** Files download five at a time from `raw.githubusercontent.com`. Other hosts read them from the clone. Empty files and binary files (any file containing a NUL byte) are skipped. One failed download fails the whole run, because skipping it would let a reprocess replace a complete index with a partial one. A run with no files at all fails with "No supported code files found in repository".
+7. **Download.** Files download five at a time from `raw.githubusercontent.com`, at the commit from step 4, so a push during the run cannot mix two versions. Other hosts read them from the clone. Empty files and binary files (any file containing a NUL byte) are skipped. One failed download fails the whole run, because skipping it would let a reprocess replace a complete index with a partial one. A run with no files at all fails with "No supported code files found in repository".
 
 8. **Clear.** Only after a successful fetch does the run apply the index settings and delete the repository's old Algolia records, then its old rows. This order means a transient GitHub error never wipes a working index. The Algolia delete is awaited for up to 120 s, and if it fails the run fails with "Could not remove previously indexed records from Algolia". A plain repository delete does not wait for this step.
 
@@ -158,24 +158,27 @@ The service picks the source from the URL's host. `GitHubService` and `GitSource
 
 | Host | Check before the row exists | Fetch during the run |
 | --- | --- | --- |
-| github.com | REST API (`check_repository`). Private repositories are readable when `GITHUB_TOKEN` has access | Trees API to list, then `raw.githubusercontent.com` to download |
-| Any other host | `git ls-remote --heads --symref`, 10 s | `git clone --depth 1 --single-branch --no-tags`, 120 s, into a temporary directory that is always removed |
+| github.com | REST API (`check_repository`). Private repositories are readable when `GITHUB_TOKEN` has access | Branches API to resolve the commit, trees API to list, then `raw.githubusercontent.com` to download, all at that commit |
+| Any other host | The host name must resolve to public addresses, then `git ls-remote --heads --symref`, 10 s | `git clone --depth 1 --single-branch --no-tags`, 120 s, into a temporary directory that is always removed |
 
 ### GitHub
 
 - The token, when set, is sent as `Authorization: token ...`. Without a token, GitHub's low unauthenticated rate limit applies and private repositories cannot be read.
 - The listing keeps only entries of type `blob` whose mode is not `120000`. Mode `120000` is a symlink, so symlinks are never listed.
-- A 404 on the trees call triggers one more request for the repository itself, to tell a missing repository from a missing branch. The error says which: "Branch 'x' not found in owner/repo".
+- The run starts with `GET /repos/<owner>/<repo>/branches/<branch>`, which gives the commit SHA. The listing and every download use that SHA, not the branch name.
+- A 404 on the branch lookup triggers one more request for the repository itself, to tell a missing repository from a missing branch. The error says which: "Branch 'x' not found in owner/repo".
 - Download retries cover timeouts, connection errors, `429` and `5xx`. A `404` or `403` on a file fails immediately.
 - A rate-limited `403` or `429` (with `X-RateLimit-Remaining: 0`) makes the API call wait for the reset time, capped at 60 s, and retry once.
 
 ### Other hosts
 
 - **Public only.** Git cannot ask for credentials, so a repository that answers `401`, `403` or `404` is reported as "not found or is private; only public repositories are supported on the host". That is `422` at the check and `404` during a run.
+- **Public addresses only.** Before git runs, the host name is resolved. If it doesn't resolve, or any address is not public (private, loopback, link-local and so on), the repository is refused with `422`: "Can't index host/path: host resolves to a private or loopback address." Git is then pinned to the checked address with `-c http.curloptResolve=<host>:443:<ip>` (IPv4 when there is one), so it never resolves the name again.
 - **No shell, no config.** Git runs through `create_subprocess_exec` with an empty `HOME`, no user or system config, no credential helper, `GIT_TERMINAL_PROMPT=0`, and only https allowed. It is killed on timeout.
 - **Symlinks are skipped.** A clone keeps symlinks as real links, so the tree walk checks every entry. It never follows a link and never lists one, and it does not descend into denied directories or `.git`.
 - **What is passed through.** Only `PATH`, `SSL_CERT_FILE`, `SSL_CERT_DIR`, `GIT_SSL_CAINFO`, `HTTPS_PROXY`, `https_proxy` and `NO_PROXY` reach git from your environment.
-- **Errors.** `504` for a timeout, `503` if git cannot start, `404` for a missing branch or repository, `502` for any other clone failure.
+- **Commit.** After the clone, `git rev-parse HEAD` records the commit that was read.
+- **Errors.** `504` for a timeout, `503` if git cannot start, `404` for a missing branch or repository, `422` for a host that resolves to a non-public address, `502` for any other clone failure.
 - **Names.** Other hosts are named `<host>/<path>`. The REST endpoint takes github.com only. The `add_repository` tool takes any host through the same service function.
 - **Image.** Both backend images install `git`.
 
@@ -189,7 +192,7 @@ The security side of this (URL validation, sandboxing) is in [the security model
 2. **Denied file names**, matched case-insensitively: `*.min.js`, `*.min.css`, `*.bundle.js`, `*.map`, `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`, `poetry.lock` and `cargo.lock`.
 3. **Unknown extensions.** A file is indexed only if its extension is in the map below. Anything else maps to `text` and is dropped.
 4. **Size.** A file whose listed size is 1 MB or more is dropped.
-5. **Sort and cap.** The rest are sorted by path and kept in order until 1000 files or 100 MB. The loop stops at the first file that would not fit. Everything after it counts as skipped.
+5. **Sort and cap.** The rest are sorted into four groups: source files (languages the parser extracts entities from), then source files on a test path, then Markdown, then files that yield no entities (JSON, YAML, CSS, HTML, XML, SQL and so on). Each group is sorted by path. Files are kept in that order until 1000 files or 100 MB. The loop stops at the first file that would not fit. Everything after it counts as skipped.
 
 | Extension | Language |
 | --- | --- |
@@ -218,7 +221,7 @@ The security side of this (URL validation, sandboxing) is in [the security model
 Three consequences are worth knowing:
 
 - **C and C++ headers are not indexed.** The map has `c` and `cpp` only. Files ending in `.h`, `.hpp` or `.cc` map to `text` and are dropped.
-- **Sorting by path decides who is dropped.** When a repository is over the cap, the files that sort last by path are the ones left out. A repository with a large `src/` and a `tests/` folder keeps `src/` and loses the end of the alphabet first.
+- **The order decides who is dropped.** When a repository is over the cap, files that yield no entities go first, then Markdown, then tests, and source files last. Within the group being cut, the files that sort last by path are left out. A repository with a large `docs/` or `examples/` folder keeps its `src/`. A test file is one under a `test`, `tests`, `__tests__`, `spec`, `specs`, `__mocks__`, `e2e` or `testing` folder, or one named like a test (see [Search](/docs/concepts/search/#ranking)).
 - **Only cap overflow is reported.** Files removed by the deny list, the extension filter or the size filter are dropped silently. Only files dropped because of the 1000-file or 100 MB cap are counted in the `Partially indexed` note.
 
 ## The truncated-tree walk
@@ -252,7 +255,7 @@ A file that parses to nothing is still stored. See [Supported languages](/docs/r
 
 **Per file.** The language comes from the file extension (the map above).
 
-**Primary language of the repository.** The run counts files per language, ignoring `text`, `markdown`, `json`, `yaml`, `xml`, `css`, `scss` and `html`. The most common language wins. A tie goes to the language that appears first in path order. Terraform, HCL and SQL do count as programming languages. If no programming file exists, the field keeps its earlier value.
+**Primary language of the repository.** The run counts files per language, ignoring `text`, `markdown`, `json`, `yaml`, `xml`, `css`, `scss` and `html`. The most common language wins. A tie goes to the language that appears first in selection order. Terraform, HCL and SQL do count as programming languages. If no programming file exists, the field keeps its earlier value.
 
 **Framework.** Detection is best effort and uses two sources:
 
@@ -311,6 +314,6 @@ The run pushes a `repository_status` frame to every WebSocket client subscribed 
 | Run ends well | `completed` | Final counts. `message` is the partial-index note, or "Processing completed successfully" |
 | Run fails | `failed` | `error` has the reason, `message` is "Processing failed" |
 
-A batch that fails to store sends no frame of its own. Each send has a 5-second timeout, and a client that stalls is dropped, so a stuck browser tab cannot slow a run down. The dashboard also polls the status endpoint every 3 seconds while a repository is in progress, so a missed frame never leaves the page stale. The frame format is in [the WebSocket reference](/docs/reference/websocket/).
+A batch that fails to store sends no frame of its own. Each send has a 5-second timeout, and a client that stalls is dropped, so a stuck browser tab cannot slow a run down. The dashboard also polls the repository while it is in progress, every 3 seconds, or every 15 seconds while the WebSocket is connected, so a missed frame never leaves the page stale. The frame format is in [the WebSocket reference](/docs/reference/websocket/).
 
 Next: [how the records are searched](/docs/concepts/search/), or [the tables the run writes](/docs/concepts/data-model/).

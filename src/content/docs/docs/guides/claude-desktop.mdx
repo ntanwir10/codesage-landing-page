@@ -150,20 +150,21 @@ If the file already has other servers, add the `codesage` object inside the exis
 
 ## The launcher
 
-`mcp_launcher.sh` does three things before it hands over to the bridge:
+`mcp_launcher.sh` does four things before it hands over to the bridge:
 
 1. **Finds Python.** If `.venv/bin/python` is missing it prints `` CodeSage: <path> not found. Run `make setup` in <repo> to create the virtualenv. `` to stderr and exits. If `codesage_mcp` or `mcp` can't be imported it prints `` CodeSage: the Python dependencies are missing in <repo>/.venv. Run `make setup` in <repo>. `` and exits.
-2. **Looks up the basic-auth password.** If `CODESAGE_BASIC_AUTH_USER` is set, `CODESAGE_BASIC_AUTH_PASSWORD` is not, and `security` exists, it reads the password from the Keychain with `security find-generic-password -s codesage-mcp -a <user> -w`. A missing entry gives an empty password and `CodeSage: no Keychain password found for <user> (service codesage-mcp); continuing with an empty password.` on stderr.
-3. **Starts the bridge.** `cd backend && exec .venv/bin/python -m codesage_mcp`.
+2. **Fills in a local key.** If `CODESAGE_API_KEY` is empty, `CODESAGE_BASIC_AUTH_USER` is not set, and `MCP_SERVER_URL` is a loopback `http://` URL (unset, or `http://127.0.0.1`, `http://localhost` or `http://[::1]`, with or without a port or path), it reads `CODESAGE_API_KEY` from `backend/.env` with the installer's own parser. A regenerated key in `backend/.env` then can't leave Claude behind. A key in the config always wins, and a remote `MCP_SERVER_URL` never gets the local key.
+3. **Looks up the basic-auth password.** If `CODESAGE_BASIC_AUTH_USER` is set, `CODESAGE_BASIC_AUTH_PASSWORD` is not, and `security` exists, it reads the password from the Keychain with `security find-generic-password -s codesage-mcp -a <user> -w`. A missing entry gives an empty password and `CodeSage: no Keychain password found for <user> (service codesage-mcp); continuing with an empty password.` on stderr.
+4. **Starts the bridge.** `cd backend && exec .venv/bin/python -m codesage_mcp`.
 
-Configuration comes only from the environment, which Claude Desktop fills from the `env` block. The bridge does not read `backend/.env`.
+Configuration comes only from the environment, which Claude Desktop fills from the `env` block. The bridge does not read `backend/.env` itself; only the launcher's key fallback in step 2 does.
 
 ## Bridge settings
 
 | Variable | Default | Notes |
 | --- | --- | --- |
 | `MCP_SERVER_URL` | `http://127.0.0.1:8001` | Backend base URL, without `/api/v1`. A trailing `/` is removed. Requests go to `/api/v1/ai/...`. |
-| `CODESAGE_API_KEY` | unset | Sent as the `X-API-Key` header. |
+| `CODESAGE_API_KEY` | unset | Sent as the `X-API-Key` header. For a loopback `MCP_SERVER_URL` with no basic-auth user, the launcher fills an empty value from `backend/.env`. |
 | `CODESAGE_BASIC_AUTH_USER` | unset | Login for the prod nginx. |
 | `CODESAGE_BASIC_AUTH_PASSWORD` | unset | Normally supplied by the launcher from the Keychain. Setting it in `env` stores it in plain text. |
 | `CODESAGE_ALLOW_INSECURE_AUTH` | unset | `1` allows the key or login over plain `http://` to a non-loopback host. |
@@ -208,13 +209,13 @@ If the Keychain write fails (prompt cancelled or keychain locked) the installer 
 
 > What repositories do you have in CodeSage, and are they ready?
 
-Claude calls `list_repositories` with no arguments. It gets each repository's `id`, `name`, `url`, `branch`, `status`, `total_files`, `total_entities`, `error_message` and `processed_at`, and can tell you which are still indexing or failed.
+Claude calls `list_repositories` with no arguments. It gets each repository's `id`, `name`, `url`, `branch`, `commit_sha` (the indexed commit), `status`, `total_files`, `total_entities`, `error_message` and `processed_at`, and can tell you which are still indexing or failed.
 
 ### `search_code`
 
 > Search the zustand repository for where the store is created.
 
-Claude calls `search_code` with something like `{"query": "create store", "repository": "pmndrs/zustand", "limit": 10}`. Each hit has the entity name and type, file path, line range, language, signature, a snippet and a source link to the exact lines. Optional arguments are `language`, `entity_type` (`function`, `class`, `import`, `doc_section` or `terraform_block`), `limit` (1 to 50) and `page` (zero-based). A question in plain words works.
+Claude calls `search_code` with something like `{"query": "create store", "repository": "pmndrs/zustand", "limit": 10}`. Each hit has the entity name and type, file path, line range, language, signature, a snippet and a source link to the exact lines. Optional arguments are `language`, `entity_type` (`function`, `class`, `import`, `doc_section` or `terraform_block`), `limit` (1 to 50) and `page` (zero-based). Imports are searched only when `entity_type` is `import`. The query is at most 512 bytes. A question in plain words works.
 
 ### `get_file`
 
@@ -255,7 +256,7 @@ A failure reaches Claude as a tool error with a message that says what to fix. C
 | Backend not running (loopback) | `` CodeSage backend not reachable at http://127.0.0.1:8001; start it with `make start-backend` `` |
 | Backend not running (remote) | `CodeSage backend not reachable at <url>; check MCP_SERVER_URL and that the host is up` |
 | Key rejected (401) | `CodeSage backend rejected the API key (401); check CODESAGE_API_KEY in the MCP server config` |
-| No key configured | `No API key is configured; set CODESAGE_API_KEY in the MCP server's env in the Claude Desktop config.` |
+| No key configured | ``No API key is configured; set CODESAGE_API_KEY in the MCP server's env in your MCP client's config (for Claude Desktop, run `make install-claude`).`` For a local backend this means `backend/.env` has no key either |
 | Proxy login rejected | `The proxy in front of CodeSage rejected the login (401); check the user and password (CODESAGE_BASIC_AUTH_USER and its Keychain entry)` |
 | Host refused (403) | `CodeSage refused the request (403): <detail>. If the backend runs on another host, add that host to ALLOWED_HOSTS on the backend and check MCP_SERVER_URL.` |
 | Wrong URL (404) | `The backend returned 404 for <path>; check that MCP_SERVER_URL points at the backend root (no /api/v1).` |

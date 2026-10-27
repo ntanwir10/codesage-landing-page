@@ -74,16 +74,16 @@ A URL the backend rejects comes back as an error that starts with `url:` and say
 | An empty or whitespace-only URL | `Invalid repository URL: empty` |
 | Over 500 characters | `url: String should have at most 500 characters` |
 
-The IP rule means a repository on a private network (an internal GitLab at `10.x.x.x`) can't be added by IP. A private DNS name is not checked by the URL rules, but the clone must still work without credentials.
+The IP rule means a repository on a private network (an internal GitLab at `10.x.x.x`) can't be added by IP. A DNS name is not checked by the URL rules, but it is resolved before git runs: a name that resolves to a private, loopback or other non-public address (such as `10.0.0.1.nip.io`), or that doesn't resolve, is refused. See [Refusal messages](#refusal-messages).
 
 ## How the backend reads the repository
 
 github.com goes through the GitHub REST API. Any other host is read with the `git` command, so the backend machine needs `git` (the prod Docker image includes it).
 
-1. **Check.** Before anything is created, the backend runs `git ls-remote --heads --symref -- <url>` (with `refs/heads/<branch>` appended when a branch is set). It times out after **10 seconds**.
+1. **Check.** Before anything is created, the backend resolves the host name and refuses it unless every address is public. It then runs `git ls-remote --heads --symref -- <url>` (with `refs/heads/<branch>` appended when a branch is set), pinned to the checked address. It times out after **10 seconds**.
 2. **Create.** If the check passes, a repository row is created with status `pending` and a background job starts.
-3. **Clone.** The job runs `git clone --depth 1 --single-branch --no-tags` (with `--branch <b>` when set) into a temporary `codesage-clone-*` folder. It times out after **120 seconds**. The folder is always removed afterwards.
-4. **Select.** The same rules as for GitHub apply: skip `node_modules`, `dist`, `build`, `vendor`, `third_party`, `.git`, `__pycache__`, `.next` and `coverage`; skip minified files, source maps and lockfiles; keep known extensions only; skip files of 1 MB or more; keep the first 1000 files or 100 MB by path. Anything left out makes the index partial.
+3. **Clone.** The job resolves and checks the host again, then runs `git clone --depth 1 --single-branch --no-tags` (with `--branch <b>` when set) into a temporary `codesage-clone-*` folder. It times out after **120 seconds**. `git rev-parse HEAD` records the commit that was cloned, and source links point at it. The folder is always removed afterwards.
+4. **Select.** The same rules as for GitHub apply: skip `node_modules`, `dist`, `build`, `vendor`, `third_party`, `.git`, `__pycache__`, `.next` and `coverage`; skip minified files, source maps and lockfiles; keep known extensions only; skip files of 1 MB or more; keep the first 1000 files or 100 MB, taking source files first, then tests, then Markdown, then files that yield no entities, each group by path. Anything left out makes the index partial.
 5. **Parse, store, index.** The same pipeline as for GitHub. See [Indexing pipeline](/docs/concepts/indexing-pipeline/).
 
 ### The git sandbox
@@ -94,22 +94,26 @@ Git runs without a shell (`create_subprocess_exec`), with no stdin, and is kille
 - `-c protocol.allow=never -c protocol.https.allow=always`, so only https works whatever your git config says;
 - a clean environment: `PATH`, `HOME` set to the null device, `GIT_TERMINAL_PROMPT=0`, `GIT_CONFIG_GLOBAL` set to the null device, `GIT_CONFIG_NOSYSTEM=1` and `LC_ALL=C`. Only `SSL_CERT_FILE`, `SSL_CERT_DIR`, `GIT_SSL_CAINFO`, `HTTPS_PROXY`, `https_proxy` and `NO_PROXY` are passed through from the backend's own environment.
 
+The `ls-remote` and `clone` calls also carry `-c http.curloptResolve=<host>:443:<ip>`, with the address the backend just checked (IPv4 when there is one). git never resolves the name itself, so a DNS answer that changes between the check and the request (DNS rebinding) can't send it elsewhere.
+
+Redirects are still followed, because gitlab.com answers `/group/repo` with a `301` to `/group/repo.git`. git follows that redirect without the address check, so a hostile public host could point it at an internal address. If that matters, route the backend's traffic through an egress proxy that refuses private addresses.
+
 Symlinks: a clone keeps symlinks as real links. The tree walk doesn't follow or list them, so they are never indexed. (Older notes that mention `core.symlinks=false` are out of date.)
 
 For a host with a private certificate authority, set `SSL_CERT_FILE` (or `GIT_SSL_CAINFO`) in the backend's environment.
 
 ## Source links in search results
 
-Search hits carry a link to the exact lines. The format depends on the host and uses the indexed branch (or `HEAD` when none was set):
+Search hits carry a link to the exact lines. The format depends on the host and uses the indexed commit as `<ref>`:
 
 | Host | Link |
 | --- | --- |
-| github.com | `https://github.com/<owner>/<repo>/blob/<branch>/<file>#L<start>-L<end>` |
-| `gitlab.com`, or any host whose name starts with `gitlab.` | `https://<host>/<path>/-/blob/<branch>/<file>#L<start>-<end>` |
-| `bitbucket.org` | `https://bitbucket.org/<path>/src/<branch>/<file>#lines-<start>:<end>` |
+| github.com | `https://github.com/<owner>/<repo>/blob/<ref>/<file>#L<start>-L<end>` |
+| `gitlab.com`, or any host whose name starts with `gitlab.` | `https://<host>/<path>/-/blob/<ref>/<file>#L<start>-<end>` |
+| `bitbucket.org` | `https://bitbucket.org/<path>/src/<ref>/<file>#lines-<start>:<end>` |
 | Any other host | No link |
 
-The link points at the branch, not at a commit. If the file changes after indexing, the line numbers can drift until you reprocess. On the repository page the source link reads **View source** for hosts other than github.com.
+The link points at the commit that was indexed, so its line numbers stay right after the branch moves on. A repository indexed before commits were recorded links to its branch (or `HEAD` when none was set) until you reprocess it. On the repository page the source link reads **View source** for hosts other than github.com.
 
 ## Refusal messages
 
@@ -118,6 +122,8 @@ For a non-GitHub URL, `add_repository` returns one of these, and nothing is crea
 | Message | Cause |
 | --- | --- |
 | `<host>/<path> was not found or is private; only public repositories are supported on <host>.` | The repository doesn't exist, or it needs a login |
+| `Can't index <host>/<path>: <host> resolves to a private or loopback address.` | The host name resolves to a non-public address (private, loopback, link-local and so on). Status `422` |
+| `Can't index <host>/<path>: <host> could not be resolved.` | The host name doesn't resolve. Status `422` |
 | `Branch '<b>' does not exist in <host>/<path>.` | The branch is missing |
 | `<host>/<path> is empty; there is nothing to index.` | The repository has no branches (checked only when no branch was given) |
 | `<host> did not respond in time; try again.` | The 10 s check timed out |
@@ -133,6 +139,7 @@ A repository that passes the check can still fail while it runs. The reason is s
 | `error_message` | Cause |
 | --- | --- |
 | `<host> did not respond in time while cloning <host>/<path>` | The clone passed 120 s |
+| `Can't clone <host>/<path>: <host> resolves to a private or loopback address` | The host name now resolves to a non-public address, or (`...could not be resolved`) no longer resolves |
 | `Could not run git to clone <host>/<path>` | `git` isn't installed or couldn't start |
 | `Branch '<b>' not found in <host>/<path>` | The branch disappeared between the check and the clone |
 | `<host>/<path> was not found or is private; only public repositories are supported on <host>` | The repository became private or was removed |

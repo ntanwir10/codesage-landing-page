@@ -13,7 +13,7 @@ A file's language comes from the text after the last `.` in its name, lowercased
 | --- | --- | --- | --- |
 | `python` | `.py` | Python `ast`, with a [line scanner fallback](#python-fallback-scanner) | functions, methods, classes, imports |
 | `javascript` | `.js`, `.jsx` | tree-sitter `javascript` | functions, methods, classes, imports |
-| `typescript` | `.ts`, `.tsx` | tree-sitter `typescript` (`tsx` for `.tsx`) | functions, methods, classes, interfaces, imports |
+| `typescript` | `.ts`, `.tsx` | tree-sitter `typescript` (`tsx` for `.tsx`) | functions, methods, classes, interfaces, type aliases, enums, imports |
 | `java` | `.java` | tree-sitter `java` | methods, constructors, classes, interfaces, enums, records, annotations, imports |
 | `go` | `.go` | tree-sitter `go` | functions, methods, structs and interfaces, imports |
 | `rust` | `.rs` | tree-sitter `rust` | functions, structs, enums, traits, impl blocks, unions, imports |
@@ -55,7 +55,7 @@ If no file in the whole run produces an entity, the run fails with `No code enti
 | `entity_type` | Produced by |
 | --- | --- |
 | `function` | Functions and methods in all programming languages. A method is still `function`; its description says "method" |
-| `class` | Classes, and in some languages interfaces, structs, enums, traits, modules and similar |
+| `class` | Classes, and in some languages interfaces, type aliases, structs, enums, traits, modules and similar |
 | `import` | Import, use, include and require statements |
 | `doc_section` | Markdown headings |
 | `terraform_block` | Top-level Terraform and HCL blocks |
@@ -71,14 +71,14 @@ Every entity has a `name` and a `description`. The name is what you search by an
 - **Python.** A function defined in a class body is a method. A function nested in another function is a function with the scope in its name, such as `Python function: outer.inner`. If a docstring exists, its first line is appended after an em dash.
 - **Go.** A method is named by its method name, with the receiver type as the owner: `Go method: Server.Start`.
 - **C and C++.** A definition written `Foo::bar` has the name `bar` and the owner `Foo`.
-- **JavaScript and TypeScript.** Beyond declarations, a function assigned to a name is recorded under that name. That covers `const f = () => {}`, `const f = function () {}`, object properties (`{ run: () => {} }`), class fields, assignments such as `obj.run = function () {}`, and `export default () => {}` (named `default`). Such functions inside a class body count as methods.
+- **JavaScript and TypeScript.** Beyond declarations, a function assigned to a name is recorded under that name. That covers `const f = () => {}`, `const f = function () {}`, object properties (`{ run: () => {} }`), class fields, assignments such as `obj.run = function () {}`, and `export default () => {}` (named `default`). The function may be wrapped in parentheses, `as` or `satisfies` casts, a `!` or a `<T>` assertion, as in `export const createStore = ((createState) => …) as CreateStore`; it is still recorded under the name. Such functions inside a class body count as methods.
 - **Parameters.** Python parameters are written `name` or `name: annotation`, with `*args` and `**kwargs` prefixes. Tree-sitter languages store each parameter's source text with whitespace collapsed.
 - **Return type.** From the annotation in Python. For tree-sitter languages it is read from the `return_type` field (Java and C-family: `type`; Go: `result`; C#: `returns` or `type`). JavaScript and Ruby store none.
 
 ### Classes and similar
 
 - **Name.** The declared name. A Rust `impl` block is named after the type it implements, so a struct and its `impl` appear as two `class` entities with the same name. A Go `type` becomes a class only when it is a struct or interface.
-- **Description.** `<Language> class: <Name>` for every class-like kind, including interfaces, structs, enums, traits and modules. Python adds the first docstring line.
+- **Description.** `<Language> class: <Name>` for classes and most class-like kinds, such as structs, traits and modules. Three kinds are named for what they are: interfaces in TypeScript, Java, C# and PHP give `<Language> interface: <Name>`, enums in TypeScript, Java and C# give `<Language> enum: <Name>`, and TypeScript type aliases give `TypeScript type: <Name>`. Rust enums and Go interfaces still say `class`. Python adds the first docstring line.
 - **Parents.** Base classes, interfaces and traits are stored in the entity's parameters list. Python stores its bases as one comma-joined string.
 - **C and C++.** A `class`, `struct` or `union` is recorded only when it has a body, so forward declarations are skipped.
 
@@ -152,7 +152,7 @@ Other lockfiles are not on the list but are not indexed anyway, because their ex
 | Largest file | under 1 MB | A file of 1 MB or more is dropped |
 | Files per run | 1,000 | The rest are skipped |
 | Bytes per run | 100 MB | The rest are skipped |
-| Selection order | By path, ascending | The first files by path are kept |
+| Selection order | Source files, then test files, then Markdown, then files that yield no entities; each group by path, ascending | Over a cap, the files at the end of that order are dropped, so source is kept first |
 | Empty or binary files | Skipped when downloaded | A file containing a NUL byte is binary |
 | Symlinks | Never listed or followed | On GitHub, tree entries with mode `120000` are ignored. On other hosts, a clone keeps symlinks as real links and the tree walk skips them |
 
@@ -183,6 +183,7 @@ Each entity becomes one Algolia record. The index name is `ALGOLIA_INDEX_NAME`.
 | `signature` | string | The definition line, cut at 500 characters |
 | `content` | string | Signature, then the body. If the body already starts with the signature, only the body |
 | `rank_weight` | integer | See below |
+| `is_test` | boolean | `true` for a file under a test folder or named like a test. See below |
 | `parameter_count` | integer | Number of parameters |
 | `lines_of_code` | integer | `line_end - line_start + 1`, at least 1 |
 
@@ -193,9 +194,13 @@ Limits on the stored text:
 - A whole record is trimmed to 9,000 bytes of JSON, `content` first and then `parameters`, because Algolia rejects a batch if one record is over 10 KB.
 - Records are sent 1,000 at a time.
 
+### `is_test`
+
+On a relevance tie, a source file ranks before a test file (`customRanking` starts with `asc(is_test)`). A file counts as a test when any folder in its path is named `test`, `tests`, `__tests__`, `spec`, `specs`, `__mocks__`, `e2e` or `testing` (in any letter case), or when its name is `test_*.py`, `*_test.py`, `*_test.go`, `*.test.*` or `*.spec.*` (JavaScript and TypeScript), `*Test.java`, `*Tests.java`, `*Test.cs`, `*Tests.cs` or `*_spec.rb`.
+
 ### `rank_weight`
 
-On a relevance tie, a higher weight ranks first (`customRanking: desc(rank_weight)`).
+After `is_test`, a higher weight ranks first (`customRanking: desc(rank_weight)`).
 
 | `entity_type` | `rank_weight` |
 | --- | --- |
@@ -211,7 +216,8 @@ On a relevance tie, a higher weight ranks first (`customRanking: desc(rank_weigh
 | --- | --- |
 | `searchableAttributes` | `entity_name`, `description`, `content`, `parameters`, `file_path` (in this order) |
 | `attributesForFaceting` | `filterOnly(repository_id)`, `entity_type`, `language`, `file_path` |
-| `customRanking` | `desc(rank_weight)` |
+| `camelCaseAttributes` | `entity_name`, so part of a camelCase name matches |
+| `customRanking` | `asc(is_test)`, `desc(rank_weight)` |
 | `highlightPreTag`, `highlightPostTag` | `<mark>`, `</mark>` |
 | `hitsPerPage` | 20 |
 | `maxValuesPerFacet` | 100 |

@@ -109,6 +109,7 @@ Create, get, list and update return this object. The same fields appear in the l
 | `description` | string or null | Free text |
 | `url` | string or null | Normalised `https://github.com/owner/repo`, at most 500 characters. Unique, compared case-insensitively on create |
 | `branch` | string or null | Branch to index. `null` means the repository's default branch |
+| `commit_sha` | string or null | The commit the index was built from; search links point at it. `null` until a run has fetched the files, and for repositories indexed before commits were recorded |
 | `language` | string or null | Primary programming language. Set by each run. At most 50 characters |
 | `framework` | string or null | Framework guessed by each run. At most 100 characters |
 | `status` | string | `pending`, `processing`, `completed` or `failed` |
@@ -116,9 +117,9 @@ Create, get, list and update return this object. The same fields appear in the l
 | `total_files` | integer | Files selected for the run. Default 0 |
 | `processed_files` | integer | Files stored so far. Default 0 |
 | `total_lines` | integer | Lines across stored files. Default 0 |
-| `created_at` | string (date-time) | When the row was created |
-| `updated_at` | string or null | Set on the first update; `null` before that |
-| `processed_at` | string or null | When the last run completed; `null` until then |
+| `created_at` | string (date-time) | When the row was created, in UTC with a `Z` suffix |
+| `updated_at` | string or null | Set on the first update; `null` before that. UTC, like `created_at` |
+| `processed_at` | string or null | When the last run completed; `null` until then. UTC, like `created_at` |
 
 ```json title="Repository object"
 {
@@ -129,14 +130,15 @@ Create, get, list and update return this object. The same fields appear in the l
   "branch": null,
   "language": "python",
   "framework": "fastapi",
+  "commit_sha": "3f9a2c71d4be08e5a6c1f0d27b94e8a3c5d16f02",
   "status": "completed",
   "error_message": null,
   "total_files": 214,
   "processed_files": 214,
   "total_lines": 31842,
-  "created_at": "2026-10-26T14:00:02",
+  "created_at": "2026-10-26T14:00:02Z",
   "updated_at": null,
-  "processed_at": "2026-10-26T14:03:11"
+  "processed_at": "2026-10-26T14:03:11Z"
 }
 ```
 
@@ -207,12 +209,13 @@ curl -sS -X POST http://127.0.0.1:8001/api/v1/repositories/ \
   "branch": "main",
   "language": null,
   "framework": null,
+  "commit_sha": null,
   "status": "pending",
   "error_message": null,
   "total_files": 0,
   "processed_files": 0,
   "total_lines": 0,
-  "created_at": "2026-10-26T14:00:02",
+  "created_at": "2026-10-26T14:00:02Z",
   "updated_at": null,
   "processed_at": null
 }
@@ -323,7 +326,7 @@ curl -sS -X DELETE -H "X-API-Key: $CODESAGE_API_KEY" http://127.0.0.1:8001/api/v
 
 ## `GET /api/v1/repositories/{repository_id}/status`
 
-Public. The dashboard polls this every 3 seconds while a repository is in progress.
+Public.
 
 ```bash title="curl"
 curl -sS http://127.0.0.1:8001/api/v1/repositories/7/status
@@ -373,6 +376,7 @@ curl -sS http://127.0.0.1:8001/api/v1/repositories/7/stats
   "total_entities": 1873,
   "entities_by_type": {"function": 910, "class": 121, "import": 702, "doc_section": 140},
   "files_by_language": {"python": 96, "typescript": 71, "markdown": 12, "json": 9},
+  "entities_by_language": {"python": 1121, "typescript": 612, "markdown": 140},
   "language": "python",
   "framework": "fastapi"
 }
@@ -382,6 +386,7 @@ curl -sS http://127.0.0.1:8001/api/v1/repositories/7/stats
 | --- | --- | --- |
 | `entities_by_type` | object | Entity count per type. A type with no entities is absent |
 | `files_by_language` | object | File count per language label |
+| `entities_by_language` | object | Entity count per file language. Only languages with indexed entities appear, which is what the dashboard's language filter offers |
 | `total_entities` | integer | Sum of `entities_by_type` |
 | Other fields | | As in the [repository object](#repository-object) |
 

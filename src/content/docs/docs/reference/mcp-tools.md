@@ -76,13 +76,14 @@ None. The schema is `{"type": "object", "properties": {}, "additionalProperties"
 | `repositories[].name` | string | `owner/name` for GitHub, `<host>/<path>` for other hosts |
 | `repositories[].url` | string or null | Normalised `https://` URL |
 | `repositories[].branch` | string or null | `null` means the default branch |
+| `repositories[].commit_sha` | string or null | The commit the index was built from. Source links point at it. `null` until a run has listed the files, or for a repository indexed before commits were recorded |
 | `repositories[].status` | string | `pending`, `processing`, `completed` or `failed` |
 | `repositories[].total_files` | integer | Files selected for the last run |
 | `repositories[].total_entities` | integer | Entities stored in SQLite |
 | `repositories[].error_message` | string or null | Why the last run failed, or what a completed run left out |
-| `repositories[].processed_at` | string or null | ISO 8601 time the last run finished |
+| `repositories[].processed_at` | string or null | ISO 8601 time the last run finished, in UTC with a `+00:00` offset |
 
-The real result, from a backend holding one finished and one failed repository:
+The real result, from a backend holding one finished and one failed repository. Both were indexed before commits were recorded, so `commit_sha` is `null`:
 
 ```json title="Result"
 {
@@ -92,6 +93,7 @@ The real result, from a backend holding one finished and one failed repository:
       "name": "gitlab.com/gitlab-org/gitlab-test",
       "url": "https://gitlab.com/gitlab-org/gitlab-test",
       "branch": null,
+      "commit_sha": null,
       "status": "failed",
       "total_files": 0,
       "total_entities": 0,
@@ -103,11 +105,12 @@ The real result, from a backend holding one finished and one failed repository:
       "name": "pmndrs/zustand",
       "url": "https://github.com/pmndrs/zustand",
       "branch": null,
+      "commit_sha": null,
       "status": "completed",
       "total_files": 120,
       "total_entities": 1025,
       "error_message": null,
-      "processed_at": "2026-10-26T23:32:50.170474"
+      "processed_at": "2026-10-26T23:32:50.170474+00:00"
     }
   ]
 }
@@ -123,13 +126,13 @@ The list is not paged or truncated. This tool has no tool-level errors beyond th
 
 ## `search_code`
 
-Full-text search over the Algolia index of functions, classes, imports, Markdown sections and Terraform blocks. Without `repository`, it searches every indexed repository.
+Full-text search over the Algolia index of functions, classes (including interfaces, type aliases and enums), Markdown sections and Terraform blocks. Imports are searched only when `entity_type` is `import`. Without `repository`, it searches every indexed repository.
 
 ### Arguments
 
 | Argument | Type | Required | Default | Constraints |
 | --- | --- | --- | --- | --- |
-| `query` | string | Yes | none | `minLength` 1 |
+| `query` | string | Yes | none | `minLength` 1, and at most 512 bytes of UTF-8 |
 | `repository` | string or null | No | all repositories | ID, name or `owner/name`; the repository must be `completed` |
 | `language` | string or null | No | none | Exact language label such as `python`, `typescript`, `cpp`, `csharp`. See [Languages](/docs/reference/languages/) |
 | `entity_type` | string or null | No | none | One of `function`, `class`, `import`, `doc_section`, `terraform_block` |
@@ -140,7 +143,9 @@ Full-text search over the Algolia index of functions, classes, imports, Markdown
 
 - Each query asks Algolia to drop words that miss when nothing matches every word (`removeWordsIfNoResults: allOptional`), ignore stop words and plurals, and use English (`queryLanguages: ["en"]`). A question in plain words returns the best partial matches instead of nothing.
 - `repository`, `language` and `entity_type` become filters joined with `AND`. Values are quoted and escaped, so input cannot add filter clauses.
-- On a relevance tie, `rank_weight` decides the order: classes, then functions and Terraform blocks, then doc sections, then imports. See [Algolia record fields](/docs/reference/languages/#algolia-record-fields).
+- Without `entity_type`, the filter `NOT entity_type:"import"` is added, so import lines don't crowd out the definitions. Pass `entity_type: "import"` to search imports.
+- Part of a camelCase name matches: `WithState` finds `TestShallowWithState`.
+- On a relevance tie, source files rank before test files, then `rank_weight` decides the order: classes, then functions and Terraform blocks, then doc sections, then imports. See [Algolia record fields](/docs/reference/languages/#algolia-record-fields).
 - With no `repository`, hits can come from repositories that are being reprocessed.
 
 ### Result
@@ -172,9 +177,9 @@ Source link formats:
 | bitbucket.org | `https://bitbucket.org/<path>/src/<ref>/<file>#lines-<start>:<end>` |
 | Any other host | `null` |
 
-`<ref>` is the repository's branch, or `HEAD` when it has none. Path segments are percent-encoded.
+`<ref>` is the commit the index was built from (`commit_sha` in `list_repositories`), so the line numbers stay right after the branch moves on. A repository indexed before commits were recorded uses its branch, or `HEAD` when it has none, until it is reprocessed. Path segments are percent-encoded.
 
-Real output for `query: "createStoreImpl"`, `repository: "pmndrs/zustand"` and `limit: 2`. The `snippet` strings are trimmed here with `…`:
+Real output for `query: "createStoreImpl"`, `repository: "pmndrs/zustand"` and `limit: 2`, from a repository indexed before commits were recorded (hence `HEAD` in the links). The `snippet` strings are trimmed here with `…`:
 
 ```json title="Result"
 {
@@ -212,8 +217,11 @@ Real output for `query: "createStoreImpl"`, `repository: "pmndrs/zustand"` and `
 }
 ```
 
+After a reprocess, each `url` has the indexed commit's SHA where this one has `HEAD`.
+
 ### Limits and truncation
 
+- `query` is at most 512 bytes of UTF-8, because Algolia rejects longer queries.
 - `limit` is capped at 50 per page. Use `page` for more.
 - Snippets are cut at 600 characters, and signatures and descriptions at 300.
 - The index stores at most 2,000 characters of each entity's body, so a snippet never shows more than that.
@@ -223,6 +231,7 @@ Real output for `query: "createStoreImpl"`, `repository: "pmndrs/zustand"` and `
 | Message | Cause |
 | --- | --- |
 | Any message from [Resolving the repository argument](#resolving-the-repository-argument) | The `repository` is unknown, ambiguous, failed or still indexing |
+| `Invalid arguments for 'search_code': ...` ending in `query is too long; the limit is 512 bytes` | `query` is over 512 bytes of UTF-8 |
 | `Search is not configured on the server (ALGOLIA_APP_ID / ALGOLIA_ADMIN_API_KEY are missing).` | The backend has no Algolia credentials |
 | `Search is unavailable; try again later.` | Algolia rejected the query or could not be reached. The detail is logged on the backend only, because it can name the Algolia host or app ID |
 
@@ -355,6 +364,8 @@ Real output for `repository: "pmndrs/zustand"`, `path_prefix: "src/vanilla"` and
   ]
 }
 ```
+
+This output comes from an index built before TypeScript type aliases and enums were extracted. After a reprocess, `StoreApi` and `StoreMutators` are described as `TypeScript interface: ...`, type aliases (`TypeScript type: ...`) and enums (`TypeScript enum: ...`) are listed as `class` entities too, and `total` grows accordingly.
 
 ### Limits and errors
 
@@ -555,7 +566,7 @@ Adds a repository by `https` URL and starts indexing it in the background. It wo
 | `branch` | string or null | No | default branch | At most 100 characters. Must not contain a `..` path segment or a NUL, and must not start with `-`. An explicit value wins over a branch in the URL |
 | `description` | string or null | No | none | Free text note |
 
-The URL is refused if it has a port, credentials, a query or fragment, the host `localhost` (or `*.localhost`), or a private or loopback IP address. A path that is not `owner/repo` (plus a recognised branch suffix) is refused as well.
+The URL is refused if it has a port, credentials, a query or fragment, the host `localhost` (or `*.localhost`), or a private or loopback IP address. A path that is not `owner/repo` (plus a recognised branch suffix) is refused as well. On hosts other than github.com, the host name is also resolved before git runs: if it doesn't resolve, or any address it resolves to is not public, the repository is refused, and git then connects only to the address that was checked.
 
 Private repositories work only on github.com, and only when the server's `GITHUB_TOKEN` can read them. On every other host the repository must be public.
 
@@ -594,6 +605,7 @@ The pre-flight check takes up to 10 seconds. A later clone on a non-GitHub host 
 | `octo/demo is already added as repository 1.` | The URL (case-insensitive) already exists |
 | `Search indexing is not configured on the server (Algolia credentials are missing).` | `ALGOLIA_APP_ID` or `ALGOLIA_ADMIN_API_KEY` is unset |
 | `<host>/<path> was not found or is private; only public repositories are supported on <host>.` | Non-GitHub host: the repository is missing or needs credentials |
+| `Can't index <host>/<path>: <host> resolves to a private or loopback address.` or `...: <host> could not be resolved.` | Non-GitHub host: the name points at a non-public address, or doesn't resolve |
 | `GitHub repository octo/demo was not found. Check the URL; if it's private, the server's GITHUB_TOKEN needs access.` | github.com: missing, or private without token access |
 | `GitHub denied access to octo/demo.` | github.com answered 403 |
 | `Branch 'x' does not exist in octo/demo.` | The branch is missing |

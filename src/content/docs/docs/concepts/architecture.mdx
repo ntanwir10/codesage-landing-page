@@ -237,7 +237,7 @@ Backend versions are pinned in [`backend/requirements.txt`](https://github.com/n
     - services/ the job, fetch, parse, index and tool code
     - main.py
   - codesage_mcp/ stdio MCP bridge (server.py, schemas.py)
-  - alembic/versions/ baseline.py, cleanup.py, drop_unused_columns.py
+  - alembic/versions/ baseline.py, cleanup.py, drop_unused_columns.py, commit_sha.py
   - tests/ pytest suite
   - Dockerfile
   - Dockerfile.prod
@@ -245,7 +245,7 @@ Backend versions are pinned in [`backend/requirements.txt`](https://github.com/n
   - requirements-dev.txt
 - frontend/
   - src/
-    - pages/ Home, Repository, Dashboard
+    - pages/ Home, Repository, File viewer, Dashboard
     - components/
     - services/ api.ts, websocket.ts
     - hooks/
