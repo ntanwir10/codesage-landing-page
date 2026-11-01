@@ -218,10 +218,6 @@ curl -sS -X POST http://127.0.0.1:8001/api/v1/ai/mcp/tools/call \
 curl -sS http://127.0.0.1:8001/api/v1/ai/mcp/capabilities | jq .tools
 ```
 
-```bash title="Performance health"
-curl -sS -H "X-API-Key: $CODESAGE_API_KEY" http://127.0.0.1:8001/api/v1/performance/health-check
-```
-
 ```bash title="Production health (self-signed certificate)"
 curl -k https://localhost/health
 ```

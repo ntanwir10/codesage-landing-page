@@ -24,7 +24,7 @@ Never commit `backend/.env`. It holds your Algolia admin key and the CodeSage AP
 
 | Variable | Default | Type | Effect |
 | --- | --- | --- | --- |
-| `CODESAGE_API_KEY` | unset | string | The shared key for write routes, the MCP tool call, resource reads, search suggestions, `/api/v1/performance/*` and `/ws`. Sent as `X-API-Key`. Empty counts as unset. `make setup`, `make start` and `make install-claude` generate one when it is missing |
+| `CODESAGE_API_KEY` | unset | string | The shared key for write routes, the MCP tool call, resource reads, search suggestions and `/ws`. Sent as `X-API-Key`. Empty counts as unset. `make setup`, `make start` and `make install-claude` generate one when it is missing |
 | `MCP_SERVER_HOST` | `127.0.0.1` | string | Host used for startup validation, the OpenAPI `servers` entry and `python -m app.main`. A value other than `127.0.0.1`, `localhost` or `::1` requires `CODESAGE_API_KEY` |
 | `MCP_SERVER_PORT` | `8001` | integer | Port used for the OpenAPI `servers` entry and `python -m app.main` |
 | `ENVIRONMENT` | `development` | string | `production` turns off `/docs` and `/redoc`. `development` makes `python -m app.main` reload on change |
@@ -62,7 +62,7 @@ Without Algolia credentials the backend still starts. Adding or reprocessing a r
 | `RATE_LIMIT_DEFAULT` | `100/minute` | limit string | Repository create, repository process and search suggestions |
 | `RATE_LIMIT_AI` | `30/minute` | limit string | MCP tool calls and MCP resource reads |
 
-A limit string is `<count>/<period>`, for example `100/minute` or `5/second`. Limits are counted per client address. Behind nginx, uvicorn takes the address from `X-Forwarded-For` in the production image. Repository update and delete, the performance routes, the WebSocket and the read routes have no limit. A rejected request gets `429` with a `Retry-After` header. See [Error shapes](/docs/reference/rest-api/#429-with-retry-after).
+A limit string is `<count>/<period>`, for example `100/minute` or `5/second`. Limits are counted per client address. Behind nginx, uvicorn takes the address from `X-Forwarded-For` in the production image. Repository update and delete, the WebSocket and the read routes have no limit. A rejected request gets `429` with a `Retry-After` header. See [Error shapes](/docs/reference/rest-api/#429-with-retry-after).
 
 ### MCP server description
 
@@ -175,8 +175,8 @@ A complete `backend/.env` with placeholders only. Replace every value in angle b
 
 ```dotenv title="backend/.env"
 # --- Security ---------------------------------------------------------------
-# Shared key for writes, MCP tool calls, resource reads, suggestions,
-# /api/v1/performance and /ws. Leave empty: make setup / start / install-claude
+# Shared key for writes, MCP tool calls, resource reads, suggestions
+# and /ws. Leave empty: make setup / start / install-claude
 # generate one and copy it to frontend/.env.
 CODESAGE_API_KEY=
 

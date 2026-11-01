@@ -34,10 +34,10 @@ The split of work follows one rule: Algolia answers questions about meaning (whi
 | Component | Path | Role |
 | --- | --- | --- |
 | App entry | [`backend/app/main.py`](https://github.com/ntanwir10/codesage-algolia-challenge/blob/master/backend/app/main.py) | Builds the FastAPI app, validates settings, runs migrations and crash recovery at start-up, and serves `/health`, `/` and `/ws`. Adds the request guard, CORS and an `X-Request-ID` header. |
-| REST API | [`backend/app/api/v1/endpoints/`](https://github.com/ntanwir10/codesage-algolia-challenge/tree/master/backend/app/api/v1/endpoints) | `repositories.py` (create, update, delete, status, stats, process), `ai.py` (MCP tool calls, resources, search suggestions) and `performance.py` (metrics). Mounted under `/api/v1`. |
+| REST API | [`backend/app/api/v1/endpoints/`](https://github.com/ntanwir10/codesage-algolia-challenge/tree/master/backend/app/api/v1/endpoints) | `repositories.py` (create, update, delete, status, stats, freshness, process) and `ai.py` (MCP tool calls, resources, search suggestions). Mounted under `/api/v1`. |
 | Core | [`backend/app/core/`](https://github.com/ntanwir10/codesage-algolia-challenge/tree/master/backend/app/core) | `config.py` (settings and start-up validation), `security.py` (API key, request guard, rate limiter, failure messages), `database.py` (engine and session) and `migrations.py` (Alembic at start-up). |
 | Models | [`backend/app/models/`](https://github.com/ntanwir10/codesage-algolia-challenge/tree/master/backend/app/models) | SQLAlchemy tables `Repository`, `CodeFile` and `CodeEntity`. See [the data model](/docs/concepts/data-model/). |
-| Services | [`backend/app/services/`](https://github.com/ntanwir10/codesage-algolia-challenge/tree/master/backend/app/services) | `repository_service.py` (job lifecycle), `github_service.py` (listing and download), `git_source.py` (public repositories on other hosts, read with git), `code_parser.py` (entities), `algolia_service.py` (index and search), `mcp_tools.py` (the seven tools), `websocket_service.py` (live status) and `performance_monitor.py` (metrics). |
+| Services | [`backend/app/services/`](https://github.com/ntanwir10/codesage-algolia-challenge/tree/master/backend/app/services) | `repository_service.py` (job lifecycle), `github_service.py` (listing and download), `git_source.py` (public repositories on other hosts, read with git), `code_parser.py` (entities), `algolia_service.py` (index and search), `mcp_tools.py` (the seven tools) and `websocket_service.py` (live status). |
 | MCP bridge | [`backend/codesage_mcp/`](https://github.com/ntanwir10/codesage-algolia-challenge/tree/master/backend/codesage_mcp) | The stdio MCP server that Claude Desktop runs. It holds no data. It turns `tools/call`, `resources/list` and `resources/read` into HTTP calls to `/api/v1/ai`, and answers `tools/list`, `resources/templates/list` and its two prompts itself. |
 | Dashboard | [`frontend/`](https://github.com/ntanwir10/codesage-algolia-challenge/tree/master/frontend) | React and Vite. `services/api.ts` and `services/websocket.ts` are the REST and WebSocket clients. |
 | nginx | [`deployment/nginx.conf`](https://github.com/ntanwir10/codesage-algolia-challenge/blob/master/deployment/nginx.conf), [`deployment/nginx.prod.conf.template`](https://github.com/ntanwir10/codesage-algolia-challenge/blob/master/deployment/nginx.prod.conf.template) | Dev: a plain HTTP proxy that drops requests for any `Host` except `localhost` and `127.0.0.1`. Prod: TLS, basic auth and API-key injection. See [Production deployment](/docs/guides/production/). |
@@ -210,7 +210,6 @@ Backend versions are pinned in [`backend/requirements.txt`](https://github.com/n
 | Settings | pydantic and pydantic-settings | 2.14.1 and 2.16.1 |
 | Logging | structlog | 26.1.0 |
 | Rate limiting | slowapi | 0.1.10 |
-| Metrics | psutil | 7.2.2 |
 | Parsing | tree-sitter-language-pack, plus Python `ast` | 1.22.1 |
 | Regex search | `regex` (supports timeouts) | 2026.9.29 |
 | MCP | `mcp` SDK and `httpx2` for the bridge | 2.3.0 and 2.16.0 |
@@ -230,7 +229,7 @@ Backend versions are pinned in [`backend/requirements.txt`](https://github.com/n
 
 - backend/
   - app/ FastAPI app
-    - api/v1/endpoints/ repositories.py, ai.py, performance.py
+    - api/v1/endpoints/ repositories.py, ai.py
     - core/ config.py, security.py, database.py, migrations.py
     - models/ repository.py, code_file.py, code_entity.py
     - schemas/ pydantic request and response models

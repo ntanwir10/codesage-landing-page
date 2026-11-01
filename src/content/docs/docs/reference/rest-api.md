@@ -23,16 +23,10 @@ The backend is a FastAPI app. The dashboard uses these routes, and you can call 
 | `GET /api/v1/repositories/{repository_id}/freshness` | No | 100/minute | Whether the index is behind its branch |
 | `GET /api/v1/repositories/{repository_id}/stats` | No | None | File, line and entity counts |
 | `POST /api/v1/repositories/{repository_id}/process` | Yes | 100/minute | Start or restart indexing |
-| `GET /api/v1/performance/metrics` | Yes | None | Full performance report |
-| `GET /api/v1/performance/operations/{operation_name}` | Yes | None | Metrics for one operation type |
-| `GET /api/v1/performance/system` | Yes | None | CPU, memory, disk and process figures |
-| `POST /api/v1/performance/reset` | Yes | None | Clear operation history |
-| `GET /api/v1/performance/health-check` | Yes | None | Quick health summary. `/performance/health` is a hidden alias |
-| `GET /api/v1/performance/export` | Yes | None | Export the report as JSON |
 | `GET /api/v1/ai/...` | Mixed | Mixed | See [MCP HTTP endpoints](/docs/reference/mcp-endpoints/) |
 | `WS /ws` | Yes | Connection caps | See [WebSocket](/docs/reference/websocket/) |
 
-The limits are `RATE_LIMIT_DEFAULT` (100/minute) for create and process, and `RATE_LIMIT_AI` (30/minute) for the MCP routes. Update, delete and the performance routes have no rate limit. See [Configuration](/docs/reference/configuration/#rate-limits).
+The limits are `RATE_LIMIT_DEFAULT` (100/minute) for create and process, and `RATE_LIMIT_AI` (30/minute) for the MCP routes. Update and delete have no rate limit. See [Configuration](/docs/reference/configuration/#rate-limits).
 
 :::note
 Repository routes end with a slash (`/api/v1/repositories/`). A request without it normally gets a redirect from the framework, so send the slash to avoid an extra round trip.
@@ -455,141 +449,6 @@ The route sets the status to `processing` and clears `error_message` before it r
 
 At most two runs execute at once. A third waits for a free slot while already showing `processing`.
 
-## Performance endpoints
-
-All routes under `/api/v1/performance` need the key and have no rate limit. The data lives in memory in the backend process: it is lost on restart and capped at the last 1,000 operations overall and 200 per operation type. The only operation type CodeSage records is `repository_processing`.
-
-### `GET /api/v1/performance/metrics`
-
-```json title="200 OK"
-{
-  "timestamp": 1792000000.123,
-  "active_operations": 0,
-  "total_operations": 3,
-  "operations_summary": {
-    "repository_processing": {
-      "operation": "repository_processing",
-      "count": 3,
-      "total_items_processed": 0,
-      "total_errors": 0,
-      "duration": {"min": 4.2, "max": 31.7, "avg": 15.9},
-      "throughput": {"min": 0, "max": 0, "avg": 0},
-      "success_rate": 100.0
-    }
-  },
-  "system_metrics": {
-    "cpu_percent": 7.5,
-    "memory": {"total_gb": 16.0, "available_gb": 6.1, "used_percent": 61.9},
-    "disk": {"total_gb": 460.4, "free_gb": 212.8, "used_percent": 53.8},
-    "process": {"memory_mb": 184.3, "threads": 14}
-  },
-  "recent_operations": [
-    {
-      "operation": "repository_processing",
-      "duration_seconds": 31.7,
-      "items_processed": 0,
-      "throughput_per_second": 0.0,
-      "memory_mb": {"start": 150.2, "end": 184.3, "peak": 184.3},
-      "errors": 0,
-      "metadata": {"repo_name": 7, "file_count": 0}
-    }
-  ]
-}
-```
-
-`recent_operations` holds the last 10. `items_processed` stays 0 for repository runs.
-
-| Status | Cause |
-| --- | --- |
-| `200` | The report |
-| `401` | Missing or wrong key |
-| `500` | `{"detail": "Failed to retrieve performance metrics"}` |
-
-### `GET /api/v1/performance/operations/{operation_name}`
-
-Returns the `operations_summary` entry for one operation type, as shown above.
-
-| Status | Cause |
-| --- | --- |
-| `200` | The summary |
-| `401` | Missing or wrong key |
-| `404` | `No metrics found for operation: <name>` |
-| `500` | `Failed to retrieve operation metrics` |
-
-### `GET /api/v1/performance/system`
-
-Returns the `system_metrics` object from the report.
-
-| Status | Cause |
-| --- | --- |
-| `200` | The system figures |
-| `401` | Missing or wrong key |
-| `500` | `Unable to retrieve system metrics` or `Failed to retrieve system metrics` |
-
-### `POST /api/v1/performance/reset`
-
-Clears the operation history and per-type statistics. System monitoring keeps working.
-
-```json title="200 OK"
-{"message": "Performance metrics reset successfully", "timestamp": 1792000000.123}
-```
-
-| Status | Cause |
-| --- | --- |
-| `200` | Reset |
-| `401` | Missing or wrong key |
-| `500` | `Failed to reset performance metrics` |
-
-### `GET /api/v1/performance/health-check`
-
-A quick check against fixed thresholds. `/api/v1/performance/health` is a hidden alias for the same handler.
-
-```json title="200 OK"
-{
-  "status": "healthy",
-  "warnings": [],
-  "active_operations": 0,
-  "system_summary": {
-    "cpu_percent": 7.5,
-    "memory_used_percent": 61.9,
-    "disk_used_percent": 53.8,
-    "process_memory_mb": 184.3
-  },
-  "timestamp": 1792000000.123
-}
-```
-
-| Condition | Result |
-| --- | --- |
-| CPU above 80 percent | `warning`, `High CPU usage` |
-| Memory above 85 percent | `warning`, `High memory usage` |
-| Disk above 90 percent | `critical`, `Disk space critical` |
-| More than 10 active operations | `warning`, `High number of active operations (<n>)` |
-
-The rules run in that order and each one overwrites `status`, so more than 10 active operations turns `critical` back into `warning`. All matching messages stay in `warnings`. A failure returns `500` with `Performance health check failed`.
-
-### `GET /api/v1/performance/export`
-
-| Query argument | Type | Default | Meaning |
-| --- | --- | --- | --- |
-| `format` | string | `json` | Only `json` (any letter case) is supported |
-
-```json title="200 OK"
-{
-  "export_timestamp": 1792000000.123,
-  "export_format": "json",
-  "codesage_version": "1.0.0",
-  "performance_data": {"timestamp": 1792000000.123, "active_operations": 0, "total_operations": 0, "operations_summary": {}, "system_metrics": {}, "recent_operations": []}
-}
-```
-
-| Status | Cause |
-| --- | --- |
-| `200` | The export |
-| `400` | `Only JSON format is currently supported` |
-| `401` | Missing or wrong key |
-| `500` | `Failed to export metrics` |
-
 ## Error shapes
 
 There are four shapes. Clients can handle all of them by checking `detail`.
@@ -675,7 +534,6 @@ Content-Type: application/json
 - The `request_id` equals the `X-Request-ID` response header and is attached to the server log lines for that request.
 - Send your own `X-Request-ID` request header to choose the ID. Without one, the server generates a 32-character hex value. Every response carries the header.
 - The 500 response includes CORS headers for an allowed `Origin`, so a browser can read it.
-- A `500` raised deliberately as an `HTTPException` (the performance routes) is the plain string shape and has no `request_id` in the body.
 
 ## Health semantics
 

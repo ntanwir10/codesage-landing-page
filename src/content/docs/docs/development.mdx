@@ -25,7 +25,7 @@ This page is for people changing CodeSage itself. To run it, start with [Quick s
 
 - backend/
   - app/ FastAPI app
-    - api/v1/ routes: `endpoints/repositories.py`, `ai.py`, `performance.py`
+    - api/v1/ routes: `endpoints/repositories.py`, `ai.py`
     - core/ config, security, database, migrations
     - models/ SQLAlchemy tables
     - schemas/ pydantic models for the REST API
@@ -86,7 +86,6 @@ The test files:
 | `test_mcp_tools.py`, `test_mcp_api.py`, `test_mcp_stdio_server.py` | The seven tools, their HTTP endpoints, and the bridge |
 | `test_websocket.py` | Auth, caps, frames and broadcast |
 | `test_migrations.py` | Upgrade, stamping and the dropped columns |
-| `test_performance.py` | The metrics service |
 | `test_install_claude_desktop.py`, `test_ensure_api_key.py` | The scripts in `scripts/` |
 
 ### Frontend

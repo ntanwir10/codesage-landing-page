@@ -43,8 +43,7 @@ When `CODESAGE_API_KEY` is set, requests must carry it as an `X-API-Key` header.
 | Needs the key | Public read |
 | --- | --- |
 | Repository create, update, delete and process | Repository list, detail, status and stats |
-| Everything under `/api/v1/performance` | MCP tool listing and capabilities (`/api/v1/ai/mcp/tools`, `/api/v1/ai/mcp/capabilities`) |
-| `POST /api/v1/ai/mcp/tools/call`, which includes the `add_repository` tool | MCP resource listing (`/api/v1/ai/mcp/resources`) |
+| `POST /api/v1/ai/mcp/tools/call`, which includes the `add_repository` tool | MCP tool listing and capabilities (`/api/v1/ai/mcp/tools`, `/api/v1/ai/mcp/capabilities`), and resource listing (`/api/v1/ai/mcp/resources`) |
 | `GET /api/v1/ai/mcp/resources/read` | `/` and `/health` |
 | `GET /api/v1/ai/search/suggestions` | |
 | The `/ws` WebSocket | |
