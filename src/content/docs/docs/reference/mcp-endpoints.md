@@ -40,7 +40,7 @@ X-API-Key: your-api-key
 
 | Field | Type | Required | Default | Meaning |
 | --- | --- | --- | --- | --- |
-| `tool_name` | string | Yes | none | One of the seven tool names |
+| `tool_name` | string | Yes | none | One of the eight tool names |
 | `arguments` | object | No | `{}` | The tool's arguments. Unknown keys are rejected |
 
 ```bash title="curl"

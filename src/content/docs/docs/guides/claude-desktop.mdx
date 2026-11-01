@@ -26,7 +26,7 @@ Claude Desktop talks to CodeSage through a small stdio program called the MCP br
 
 Two facts shape everything below:
 
-- **Schemas live in the bridge.** `tools/list` is answered from `backend/codesage_mcp/schemas.py`, so Claude sees the seven tools even when the backend is down. Only tool calls and resource reads need the backend.
+- **Schemas live in the bridge.** `tools/list` is answered from `backend/codesage_mcp/schemas.py`, so Claude sees the eight tools even when the backend is down. Only tool calls and resource reads need the backend.
 - **Arguments are checked twice.** The bridge validates them first, then the backend does again. Unknown arguments are rejected in both places, so a typo can't silently widen a query.
 
 ## Before you start
@@ -241,6 +241,12 @@ Claude calls `analyze_repository`. It gets file, line and entity totals, `entiti
 
 Claude calls `find_patterns` with `{"pattern": "TODO|FIXME", "regex": true, "path_glob": "src/*"}`. The pattern is 1 to 200 characters. `path_glob` is matched against the whole path, case-sensitive, and `*` also matches `/`. Regex search gives each file 1 second and the whole call 10 seconds; files over 1,000,000 characters are skipped; a call that runs out of time returns `truncated: true` and lists `skipped_files` (the first 50) with `skipped_count`. Literal search has no time limit.
 
+### `find_references`
+
+> In pmndrs/zustand, where is `createStore` used, and which functions call it?
+
+Claude calls `find_references` with `{"name": "createStore"}`. It gets the definitions first, then each whole-word use with `kind` (`import` or `reference`) and `in`, the function or class the use sits in. Source files come before tests and docs. `name` is one identifier without dots; `path_glob` and `max_results` (1 to 500, default 100) work as in `find_patterns`.
+
 ### `add_repository`
 
 > Add https://gitlab.com/group/project to CodeSage, then tell me when it's ready.
@@ -292,7 +298,7 @@ The bridge also answers `resources/list` and `resources/read`. Reading needs the
 The bridge also offers two prompts, ready-made requests that an MCP client can list for you to pick. They work with the backend down.
 
 - **Explain this repository** (`explain_repository`, takes `repository`). Claude runs `analyze_repository`, `list_definitions` and `get_file`, then explains what the repository does, how it is laid out and where to start reading.
-- **Where is this implemented?** (`find_implementation`, takes `feature` and an optional `repository`). Claude runs `search_code`, `list_definitions` and `get_file`, then answers with the files and line ranges. Leave `repository` empty to search every repository.
+- **Where is this implemented?** (`find_implementation`, takes `feature` and an optional `repository`). Claude runs `search_code`, `list_definitions`, `find_references` and `get_file`, then answers with the files and line ranges. Leave `repository` empty to search every repository.
 
 Details are in the [MCP tools reference](/docs/reference/mcp-tools/#prompts).
 
@@ -314,7 +320,7 @@ From the repository root:
 npx @modelcontextprotocol/inspector ./mcp_launcher.sh
 ```
 
-Set `MCP_SERVER_URL` and `CODESAGE_API_KEY` in the Inspector's environment fields, or export them first. You should see seven tools under **Tools**. With the backend running, calling one returns JSON.
+Set `MCP_SERVER_URL` and `CODESAGE_API_KEY` in the Inspector's environment fields, or export them first. You should see eight tools under **Tools**. With the backend running, calling one returns JSON.
 
 ## Limits to know
 

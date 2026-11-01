@@ -1,12 +1,12 @@
 ---
 title: Introduction
-description: CodeSage indexes your repositories into Algolia and gives Claude seven tools to search and read them.
+description: CodeSage indexes your repositories into Algolia and gives Claude eight tools to search and read them.
 ---
 
 import { Aside, Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
 import Mermaid from '~/components/Mermaid.astro';
 
-Claude can't see your codebase. You can paste a file into a chat, but it can't search a repository, list the functions in a directory or open the file a stack trace points at. CodeSage closes that gap. It reads a repository once, breaks it into searchable pieces and stores them in Algolia. After that, Claude Desktop (or any other MCP client) can search the code, read files, list definitions and count things, all through seven tools.
+Claude can't see your codebase. You can paste a file into a chat, but it can't search a repository, list the functions in a directory or open the file a stack trace points at. CodeSage closes that gap. It reads a repository once, breaks it into searchable pieces and stores them in Algolia. After that, Claude Desktop (or any other MCP client) can search the code, read files, list definitions and count things, all through eight tools.
 
 CodeSage is a self-hosted tool. You run it on your own machine or server, with your own Algolia account. There is no hosted demo and no CodeSage service to sign up for. It was built for the [Algolia MCP Server Challenge](https://dev.to/challenges/algolia-2025-07-09).
 
@@ -95,7 +95,7 @@ Details, including which file extensions are picked up, are in [Languages](/docs
 
 - **Not a hosted service.** Nobody runs CodeSage for you. You supply the Algolia account and, optionally, a GitHub token.
 - **Not a code-execution tool.** CodeSage reads and searches text. It never runs, builds or tests the code it indexes.
-- **Read-only, with one exception.** Six of the seven tools only read. `add_repository` is the one tool that changes state: it creates a repository record and starts indexing.
+- **Read-only, with one exception.** Seven of the eight tools only read. `add_repository` is the one tool that changes state: it creates a repository record and starts indexing.
 - **Not a live view.** It indexes a snapshot of a branch. Changes to the repository after indexing don't appear until you reprocess it.
 - **Not multi-user.** There is one shared API key and no per-user permissions.
 
@@ -112,7 +112,7 @@ CodeSage is designed for one person on a trusted machine. Before you expose it o
 | Index | The Algolia index (default name `codesage_code_entities`) that holds the entity records. Indexing is the act of filling it. |
 | MCP | Model Context Protocol, the standard way for an AI client such as Claude Desktop to call tools on a server. |
 | Bridge | The small stdio program (`python -m codesage_mcp`) that Claude Desktop runs. It speaks MCP to Claude and HTTP to the backend. |
-| Tool | One of the seven MCP operations: `list_repositories`, `search_code`, `get_file`, `list_definitions`, `analyze_repository`, `find_patterns` and `add_repository`. |
+| Tool | One of the eight MCP operations: `list_repositories`, `search_code`, `get_file`, `list_definitions`, `analyze_repository`, `find_patterns`, `find_references` and `add_repository`. |
 | Run (or job) | One background indexing pass over a repository. At most one run per repository and at most two runs at once. A run ends as `completed` or `failed`. |
 | Partial index | A run that ended `completed` but left something out, such as files over the 1000-file or 100 MB limit. The repository's `error_message` begins with `Partially indexed:` and the dashboard shows an amber card. |
 

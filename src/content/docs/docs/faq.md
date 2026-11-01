@@ -15,7 +15,7 @@ CodeSage itself has no fee in these sources. What you pay for is on your side: y
 
 ### Do I need Claude Desktop?
 
-No. The dashboard works on its own for adding, watching and searching repositories. Claude Desktop (or another MCP client) is how you get the seven tools. See [Introduction](/docs/introduction/).
+No. The dashboard works on its own for adding, watching and searching repositories. Claude Desktop (or another MCP client) is how you get the eight tools. See [Introduction](/docs/introduction/).
 
 ### Do I need Docker?
 
