@@ -195,7 +195,7 @@ curl -sS http://127.0.0.1:8001/api/v1/ai/mcp/tools
 }
 ```
 
-Only the repository list is advertised. The per-repository file list is readable but not listed. See [Resources](/docs/reference/mcp-tools/#resources).
+Only the repository list is advertised here. The bridge advertises the per-repository file list itself, as the template `codesage://repositories/{id}/files`. See [Resources](/docs/reference/mcp-tools/#resources).
 
 ## `GET /api/v1/ai/mcp/resources/read`
 
