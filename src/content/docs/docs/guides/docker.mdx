@@ -171,7 +171,7 @@ Both stacks publish port 80, so start only one. Stop the other with `docker comp
 
 ## What CI checks
 
-CI validates the dev Compose file with `docker compose config -q` and the dev nginx config with `nginx -t`. It builds the frontend image. It does not build the dev backend image (`backend/Dockerfile`) and never starts a container, so expect to fix small runtime problems yourself.
+CI validates the dev Compose file with `docker compose config -q` and the dev nginx config with `nginx -t`. It then starts this stack with a throwaway `backend/.env` (fake Algolia keys). It checks that the backend answers `/health`, that nginx serves the app at `/`, and that nginx proxies `/health` and an API call to the backend, then tears the stack down. It never adds a repository, so indexing inside Docker (Algolia, and `git` for other hosts) is not covered. The [development guide](/docs/development/) lists every step.
 
 ## When something goes wrong
 

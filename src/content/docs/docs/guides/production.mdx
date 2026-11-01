@@ -11,7 +11,7 @@ The prod stack is for a server that more than one person reaches over a network.
 The files are [`deployment/docker-compose.prod.yml`](https://github.com/ntanwir10/codesage-algolia-challenge/blob/master/deployment/docker-compose.prod.yml), [`deployment/nginx.prod.conf.template`](https://github.com/ntanwir10/codesage-algolia-challenge/blob/master/deployment/nginx.prod.conf.template) and [`backend/Dockerfile.prod`](https://github.com/ntanwir10/codesage-algolia-challenge/blob/master/backend/Dockerfile.prod).
 
 <Aside type="caution">
-CI validates both Compose files and both nginx configs, and it builds the images. It never starts the prod stack. The full stack was last run by hand with a self-signed certificate. Expect to fix small problems at runtime, and test your own setup before you rely on it.
+CI validates both Compose files and both nginx configs, builds the prod backend image, and smoke-tests the dev stack. It never starts the prod stack. The full stack was last run by hand with a self-signed certificate. Expect to fix small problems at runtime, and test your own setup before you rely on it.
 </Aside>
 
 <Mermaid caption="The prod stack. Only nginx is published. Port 80 serves /health and redirects everything else to HTTPS." code={`flowchart TB
