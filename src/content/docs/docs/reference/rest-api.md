@@ -231,8 +231,8 @@ Nothing is created when a check fails. The checks run in this order: key, reques
 | `401` | Missing or wrong key |
 | `403` | Request guard refusal |
 | `409` | Duplicate URL, matched case-insensitively. The body is `{"detail": "octo/demo has already been added.", "repository_id": 1}`. A rare race can instead give `{"detail": "Repository with URL https://github.com/octo/demo already exists"}` with no `repository_id` |
-| `422` with a list | Body validation. `loc` is `["body", "url"]`, `["body", "branch"]`, `["body", "name"]` and so on. A URL on another host is `Invalid GitHub URL (host must be github.com): ...` |
-| `422` with a string | The GitHub check refused the repository (see the table below) |
+| `422` with a list | Body validation. `loc` is `["body", "url"]`, `["body", "branch"]`, `["body", "name"]` and so on. A refused URL is `Invalid repository URL (<reason>): ...`, for example a port, credentials, `localhost` or a private address. Any https git host is accepted |
+| `422` with a string | The repository check refused it: GitHub's (see the table below), or `git ls-remote` for other hosts ([Other git hosts](/docs/guides/other-git-hosts/#refusal-messages)) |
 | `429` | Rate limit reached |
 | `502` | GitHub rejected the server's `GITHUB_TOKEN`, answered with a 5xx, or could not be reached |
 | `503` | Algolia is not configured, or GitHub's API rate limit was reached (with `Retry-After`) |
@@ -601,8 +601,8 @@ Request validation failures carry a list. Each entry names the field in `loc`.
     {
       "type": "invalid_url",
       "loc": ["body", "url"],
-      "msg": "Invalid GitHub URL (host must be github.com): https://gitlab.com/group/project",
-      "input": "https://gitlab.com/group/project"
+      "msg": "Invalid repository URL (ports are not supported): https://gitlab.com:8443/group/project",
+      "input": "https://gitlab.com:8443/group/project"
     }
   ]
 }

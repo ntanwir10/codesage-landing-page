@@ -31,8 +31,7 @@ Find your symptom in the section for the part that is failing. Messages are quot
 | Symptom | Cause | Fix |
 | --- | --- | --- |
 | Dashboard actions fail with `401`, or an auth notice appears | The key in the dashboard differs from `backend/.env`. The dev bundle reads `VITE_CODESAGE_API_KEY` | Run `make setup` so `frontend/.env` matches, then restart Vite. In Docker dev, re-export `CODESAGE_API_KEY` and run `make build && make up` |
-| Add form shows a message about the URL or branch (`422`) | Not a GitHub repository URL, or an invalid branch name | Use `owner/repo` or a github.com URL. Branch names cannot contain `..` or start with `-` |
-| "Invalid GitHub URL (host must be github.com)" | The dashboard and `POST /api/v1/repositories/` take github.com only | Add other hosts from Claude with the `add_repository` tool |
+| Add form shows a message about the URL or branch (`422`) | Not a repository URL the server accepts (https only, with no port, credentials, `localhost` or private address), or an invalid branch name | Use `owner/repo`, a github.com URL or another host's https URL. Branch names cannot contain `..` or start with `-` |
 | "GitHub repository owner/repo was not found" (`422`) | The repository does not exist, or it is private and `GITHUB_TOKEN` cannot read it | Check the URL. For a private repository, give the token access |
 | "Branch 'x' does not exist in owner/repo." or "owner/repo is empty; there is nothing to index." (`422`) | The branch is missing, or the repository has no content | Fix the branch, or leave it empty for the default |
 | "GitHub denied access to owner/repo." (`422`) | GitHub answered `403` for a reason other than a rate limit | Check the token's access |

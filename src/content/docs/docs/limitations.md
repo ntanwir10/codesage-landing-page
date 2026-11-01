@@ -41,7 +41,7 @@ These are limits of the current code, not bugs waiting for a fix. Each row says 
 
 | Limitation | Why | Workaround |
 | --- | --- | --- |
-| **The dashboard and `POST /api/v1/repositories/` take github.com only.** | The REST schema checks the host. Other hosts go through the `add_repository` tool, which the dashboard has no form for | Ask Claude to add the repository. It then appears in the dashboard |
+| **git follows a host's first redirect unchecked** on hosts other than github.com. | The address is checked before git runs, but not where a redirect points | Route the backend through an egress proxy that refuses private addresses |
 | **Other hosts are public only, over https, with no port or credentials.** | Git runs without prompts or a credential helper, so a private repository cannot authenticate | Make the repository public, or mirror it on github.com |
 | **Private repositories work on github.com only**, with one server-wide `GITHUB_TOKEN`. | The token belongs to the server, so every user sees what it can read | Use a token with the narrowest access you can |
 | **Source links exist for GitHub, GitLab and Bitbucket only.** GitLab means `gitlab.com` or a host starting with `gitlab.`. | The link format is host specific | Other hosts get results without a `url` |

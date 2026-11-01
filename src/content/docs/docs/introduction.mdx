@@ -15,7 +15,7 @@ CodeSage is a self-hosted tool. You run it on your own machine or server, with y
 - **Indexes a repository.** CodeSage fetches the code files of a GitHub repository (or clones a public repository from another git host) and extracts functions, classes, methods, imports, Markdown doc sections and Terraform blocks. Each piece is called an entity.
 - **Stores two copies.** Full file contents and the entity list go into a local SQLite database. A searchable record per entity goes into your Algolia index.
 - **Serves Claude.** A small bridge program that Claude Desktop starts turns each tool call into an HTTP call to the CodeSage backend. Search goes to Algolia. Reading files and listing definitions go to SQLite.
-- **Shows progress.** A React dashboard adds GitHub repositories, shows indexing live over a WebSocket and searches the index.
+- **Shows progress.** A React dashboard adds repositories from GitHub, GitLab, Bitbucket or any https git host, shows indexing live over a WebSocket and searches the index.
 
 ## Two ways in
 
@@ -23,10 +23,10 @@ Both end at the same FastAPI backend.
 
 <CardGrid>
   <Card title="Web dashboard" icon="laptop">
-    Open `http://localhost:5173`, type `owner/repo`, and watch the repository index. Search it, reprocess it or delete it. The dashboard adds GitHub repositories only. See [the dashboard guide](/docs/guides/web-dashboard/).
+    Open `http://localhost:5173`, type `owner/repo` or paste a repository URL from any git host, and watch the repository index. Search it, reprocess it or delete it. See [the dashboard guide](/docs/guides/web-dashboard/).
   </Card>
   <Card title="Claude Desktop (MCP)" icon="rocket">
-    Run `make install-claude`, restart Claude Desktop and ask about your code. Claude can also add public repositories from GitLab, Bitbucket and self-hosted servers. See [the Claude Desktop guide](/docs/guides/claude-desktop/).
+    Run `make install-claude`, restart Claude Desktop and ask about your code. Claude can add repositories too. See [the Claude Desktop guide](/docs/guides/claude-desktop/).
   </Card>
 </CardGrid>
 
