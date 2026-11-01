@@ -423,7 +423,8 @@ Starts or restarts indexing. Needs the key. Limit 100/minute. It returns before 
 
 | Query argument | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `force_reprocess` | boolean | `false` | Required to re-run a repository whose status is `completed` |
+| `force_reprocess` | boolean | `false` | Required to re-run a repository whose status is `completed`. The run is a full rebuild |
+| `incremental` | boolean | `false` | Re-parse and re-index only files whose content changed since the last run; unchanged files keep their rows and records. Implies `force_reprocess` |
 
 ```bash title="curl"
 curl -sS -X POST -H "X-API-Key: $CODESAGE_API_KEY" \
