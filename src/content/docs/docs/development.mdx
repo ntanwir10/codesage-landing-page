@@ -117,9 +117,16 @@ The workflow is [`.github/workflows/ci.yml`](https://github.com/ntanwir10/codesa
 | --- | --- |
 | `backend` (working directory `backend`) | Check out. Set up Python 3.13 with the pip cache keyed on `backend/requirements*.txt`. `pip install -r requirements-dev.txt`. `ruff check . ../scripts`. `python -m pytest` |
 | `frontend` (working directory `frontend`) | Check out. Set up Node 22 with the npm cache keyed on `package-lock.json`. `npm ci`. `npm run lint`. `npm run build`. `npm test --if-present` |
-| `docker` | Check out. `cp .env.example backend/.env` (Compose reads it through `env_file`). `docker compose -f deployment/docker-compose.yml config -q`. The same for `docker-compose.prod.yml`. `docker build -f backend/Dockerfile.prod backend`. `nginx -t` on the dev config, with `backend` mapped to a dummy address. `nginx -t` on the rendered prod template, using a throwaway certificate, htpasswd and key. `docker build frontend` |
+| `docker` | Check out. Write a throwaway `backend/.env` (Compose reads it through `env_file`) with a CI-only `CODESAGE_API_KEY` and fake Algolia keys. `docker compose -f deployment/docker-compose.yml config -q`. The same for `docker-compose.prod.yml`. `docker build -f backend/Dockerfile.prod backend`. `nginx -t` on the dev config, with `backend` mapped to a dummy address. `nginx -t` on the rendered prod template, using a throwaway certificate, htpasswd and key. Then the dev stack smoke test (below) |
 
-CI does not build the dev backend image (`backend/Dockerfile`) and never starts a container. The prod stack was last run by hand with a self-signed certificate.
+The smoke test runs `docker compose -f deployment/docker-compose.yml up -d --build`, which builds both dev images, and then checks four things:
+
+- `curl -f localhost:8001/health` answers within 2 minutes. With fake Algolia keys it reports `degraded`.
+- nginx serves the app's `index.html` at `/`.
+- nginx proxies `/health`, and the database is `healthy`.
+- `GET /api/v1/repositories/` through nginx, with the key, returns `[]`.
+
+If a step fails, the job prints `docker compose logs`, and it always ends with `docker compose down -v`. It never indexes a repository, and it never starts the prod stack, which was last run by hand with a self-signed certificate.
 
 ## Add a database migration
 
