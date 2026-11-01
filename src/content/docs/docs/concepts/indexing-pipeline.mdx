@@ -54,14 +54,14 @@ The check makes one attempt per call. It has no retries and no rate-limit sleeps
     configured -- "yes" --> fetch["List the repository<br/>GitHub API, or a shallow clone<br/>skip vendored and minified files, lockfiles"]
     fetch --> select["Keep files under 1 MB<br/>at most 1000 files and 100 MB"]
     select --> download["Download the files"]
-    download --> clear["Clear the previous index<br/>Algolia records and rows"]
-    clear --> batch["Next batch of 200 files"]
-    batch --> parse["Parse each file<br/>a parse failure is counted"]
+    download --> batch["Next batch of 200 files<br/>the previous index stays searchable"]
+    batch --> parse["Parse each file, or copy it unchanged<br/>in an incremental run"]
     parse --> store["Store files and entities<br/>a failed batch is rolled back"]
     store --> more{"More files?"}
     more -- "yes" --> batch
     more -- "no" --> index["Index the entities in Algolia"]
-    index --> skipped{"Anything left out?"}
+    index --> swap["Delete the previous run's rows and records<br/>incremental: only for paths not reused"]
+    swap --> skipped{"Anything left out?"}
     skipped -- "no" --> completed["completed"]
     skipped -- "yes" --> partial["completed<br/>error_message: Partially indexed"]
     configured -- "no" --> failed["failed<br/>error_message says why"]
@@ -138,11 +138,15 @@ Why these numbers:
 
 7. **Download.** Files download five at a time from `raw.githubusercontent.com`, at the commit from step 4, so a push during the run cannot mix two versions. Other hosts read them from the clone. Empty files and binary files (any file containing a NUL byte) are skipped. One failed download fails the whole run, because skipping it would let a reprocess replace a complete index with a partial one. A run with no files at all fails with "No supported code files found in repository".
 
-8. **Clear.** Only after a successful fetch does the run apply the index settings and delete the repository's old Algolia records, then its old rows. This order means a transient GitHub error never wipes a working index. The Algolia delete is awaited for up to 120 s, and if it fails the run fails with "Could not remove previously indexed records from Algolia". A plain repository delete does not wait for this step.
+8. **Keep the previous index.** The run applies the index settings but deletes nothing yet: the previous run's rows and records stay searchable until this run is complete. Each run tags its records with its own `run_id`, and its rows are told apart by id. If the run fails, what it wrote is discarded and the previous index stays.
 
 9. **Parse and store.** Files are handled in batches of 200. For each file the run parses entities in a worker thread, builds a `CodeFile` row with its `CodeEntity` rows, and builds the Algolia records. The batch is committed in a worker thread, then `processed_files` is updated and progress is broadcast.
 
-10. **Index.** All records go to Algolia in requests of 1000. The run fails if there are no records ("No code entities were indexed from N files") or if Algolia rejects a request ("Algolia rejected the indexing request").
+10. **Index.** All new records go to Algolia in requests of 1000. The run fails if there are no records and nothing was reused ("No code entities were indexed from N files") or if Algolia rejects a request ("Algolia rejected the indexing request").
+
+    **Incremental runs.** With `?incremental=true` or the [scheduled refresh](/docs/reference/configuration/), a file whose content and language match the previous run's is copied with its entities, without parsing, and keeps its Algolia records. Only changed and new files are parsed and indexed. Every file is still downloaded.
+
+    **Swap.** Once indexing succeeds, the previous run's rows are deleted. A full run deletes every record but its own. An incremental run deletes earlier records only for previous paths it didn't reuse (changed, removed, or not stored this time), 50 paths per request. A run where nothing changed writes nothing to Algolia and just moves `commit_sha`.
 
 11. **Finish.** The run sets the primary language and the framework, adds a `Partially indexed:` note if something was left out, sets `completed` and `processed_at`, and broadcasts the final frame. See [How language and framework are detected](#how-language-and-framework-are-detected).
 
