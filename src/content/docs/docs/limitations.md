@@ -94,7 +94,7 @@ These are limits of the current code, not bugs waiting for a fix. Each row says 
 
 | Limitation | Why | Workaround |
 | --- | --- | --- |
-| **Frontend tests are unit tests only.** | Vitest with jsdom | Test the dashboard in a browser |
+| **The end-to-end tests skip search, freshness and indexing.** | They run offline against a seeded database, with no Algolia or GitHub, in Chromium only | Check those against your own deployment |
 | **CI only smoke-tests the dev Docker stack, and never starts the prod one.** It starts the dev stack with fake Algolia keys and checks the backend, nginx and one API call, but never indexes a repository there. For the prod stack it validates the Compose file and nginx template and builds the backend image. | Indexing needs real Algolia and GitHub access, and the prod stack needs a certificate and a login | Test your own deployment. The prod stack was last run by hand with a self-signed certificate |
 
 See also [Troubleshooting](/docs/troubleshooting/) and the [FAQ](/docs/faq/).

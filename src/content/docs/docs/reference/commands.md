@@ -156,6 +156,7 @@ Run these from `frontend/`.
 | `npm run lint` | `eslint .` | Linting TypeScript and React code |
 | `npm run preview` | `vite preview` | Serving the production build locally |
 | `npm test` | `vitest run` | Running the unit tests once (jsdom) |
+| `npm run test:e2e` | `playwright test` | Running the end-to-end tests in Chromium against an isolated, seeded backend. Run `npx playwright install chromium` once first |
 
 Install dependencies with `npm ci`. Node.js 22 or newer is required.
 
