@@ -285,7 +285,16 @@ The bridge also answers `resources/list` and `resources/read`. Reading needs the
 | `codesage://repositories` | The same data as `list_repositories` |
 | `codesage://repositories/{id}/files` | `repository`, `total_files`, `truncated` and `files` (path, language, line count): at most the first 5000 files |
 
-`{id}` is the numeric ID. Only the first URI is listed by `resources/list`; the second is read by URI. The server offers tools and resources only, no prompts.
+`{id}` is the numeric ID. The first URI is listed by `resources/list`, and the second by `resources/templates/list` as a template to fill in.
+
+## Prompts
+
+The bridge also offers two prompts, ready-made requests that an MCP client can list for you to pick. They work with the backend down.
+
+- **Explain this repository** (`explain_repository`, takes `repository`). Claude runs `analyze_repository`, `list_definitions` and `get_file`, then explains what the repository does, how it is laid out and where to start reading.
+- **Where is this implemented?** (`find_implementation`, takes `feature` and an optional `repository`). Claude runs `search_code`, `list_definitions` and `get_file`, then answers with the files and line ranges. Leave `repository` empty to search every repository.
+
+Details are in the [MCP tools reference](/docs/reference/mcp-tools/#prompts).
 
 ## Where the log lives
 

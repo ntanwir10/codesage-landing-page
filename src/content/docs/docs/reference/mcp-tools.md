@@ -626,7 +626,7 @@ The bridge also answers `resources/list` and `resources/read`. Reading needs the
 | URI | MIME type | Listed by `resources/list` | Content |
 | --- | --- | --- | --- |
 | `codesage://repositories` | `application/json` | Yes (name `Repositories`) | The same object as [`list_repositories`](#list_repositories) |
-| `codesage://repositories/{id}/files` | `application/json` | No | The files of one repository |
+| `codesage://repositories/{id}/files` | `application/json` | No; listed as a template (name `Repository files`) by `resources/templates/list` | The files of one repository |
 
 `{id}` is the numeric ID, 1 to 19 digits. Names are not accepted here. The files resource is readable even when the repository is not `completed`.
 
@@ -666,6 +666,22 @@ Resource reads fail as MCP protocol errors, not tool errors. The backend answers
 | --- | --- |
 | `Unknown resource '<uri>'` | The URI is neither of the two forms above, or the ID has more than 19 digits |
 | `Repository 99 not found` | No repository has that ID. IDs at or above 2^63 are treated the same way |
+
+## Prompts
+
+The bridge answers `prompts/list` and `prompts/get` on its own, so prompts work with the backend down and need no key. Each prompt returns one user message that tells Claude which tools to call, in what order, and what to answer with.
+
+| Prompt | Title | Arguments | Steers Claude to |
+| --- | --- | --- | --- |
+| `explain_repository` | Explain this repository | `repository` (required) | [`analyze_repository`](#analyze_repository), then [`list_definitions`](#list_definitions) (with `path_prefix`, and `entity_type: "doc_section"` for docs), then [`get_file`](#get_file) on the README and central files. The answer covers what the repository does, its layout and main parts, and where to start reading, citing paths and lines |
+| `find_implementation` | Where is this implemented? | `feature` (required), `repository` (optional) | [`search_code`](#search_code), then `list_definitions` around the best hits, then `get_file` to confirm. The answer gives files, line ranges and source links, or says nothing matched. An empty `repository` searches every repository |
+
+Arguments are trimmed, and a blank one counts as missing. Errors are MCP protocol errors:
+
+| Message | Cause |
+| --- | --- |
+| `Prompt '<name>' needs the '<argument>' argument` | A required argument is missing or blank |
+| `Unknown prompt '<name>'. Available prompts: explain_repository, find_implementation` | No prompt has that name |
 
 ## Related pages
 
