@@ -15,11 +15,12 @@ The backend is a FastAPI app. The dashboard uses these routes, and you can call 
 | `GET /health` | No | None | Database and Algolia health |
 | `GET /docs`, `GET /redoc` | No | None | Interactive API docs. Off when `ENVIRONMENT=production` |
 | `GET /api/v1/repositories/` | No | None | List repositories |
-| `POST /api/v1/repositories/` | Yes | 100/minute | Add a GitHub repository and start indexing |
+| `POST /api/v1/repositories/` | Yes | 100/minute | Add a repository from any git host and start indexing |
 | `GET /api/v1/repositories/{repository_id}` | No | None | One repository |
 | `PUT /api/v1/repositories/{repository_id}` | Yes | None | Edit a repository |
 | `DELETE /api/v1/repositories/{repository_id}` | Yes | None | Delete a repository and its index records |
 | `GET /api/v1/repositories/{repository_id}/status` | No | None | Processing status and progress |
+| `GET /api/v1/repositories/{repository_id}/freshness` | No | 100/minute | Whether the index is behind its branch |
 | `GET /api/v1/repositories/{repository_id}/stats` | No | None | File, line and entity counts |
 | `POST /api/v1/repositories/{repository_id}/process` | Yes | 100/minute | Start or restart indexing |
 | `GET /api/v1/performance/metrics` | Yes | None | Full performance report |
@@ -173,7 +174,7 @@ The response is a JSON array of [repository objects](#repository-object).
 
 ## `POST /api/v1/repositories/`
 
-Adds a GitHub repository and starts a background indexing job. Needs the key. Limit 100/minute.
+Adds a repository from GitHub or any https git host and starts a background indexing job. Needs the key. Limit 100/minute.
 
 The route accepts github.com URLs only. Other hosts are added through the [`add_repository`](/docs/reference/mcp-tools/#add_repository) tool. See [Other git hosts](/docs/guides/other-git-hosts/).
 
@@ -357,6 +358,32 @@ curl -sS http://127.0.0.1:8001/api/v1/repositories/7/status
 | `200` | The status object |
 | `404` | `Repository 7 not found` |
 | `422` | Bad ID |
+
+## `GET /api/v1/repositories/{repository_id}/freshness`
+
+Compares the commit the index was built from (`commit_sha`) with the branch on its host now. No key is needed. Limit 100/minute.
+
+```json title="200 OK"
+{"branch": "main", "commits_behind": 3, "changed": true, "checked_at": "2026-11-01T17:25:15.981128Z"}
+```
+
+| Key | Meaning |
+| --- | --- |
+| `branch` | The repository's branch, or its default branch when none is set |
+| `commits_behind` | Commits on the branch since the indexed one. github.com only, from one `compare/{sha}...{branch}` call. `null` on other hosts |
+| `changed` | The branch has moved since the index was built. A reset or force-pushed branch counts, even with `commits_behind` at `0`. Other hosts compare the commit from `git ls-remote` |
+| `checked_at` | When the host was asked |
+
+Answers are cached in the server for 10 minutes per repository, branch and commit. A reprocess records a new commit, so the next call asks the host again. The call never retries, and never waits out a rate limit.
+
+| Status | Cause |
+| --- | --- |
+| `200` | The comparison |
+| `404` | `Repository 7 not found` |
+| `409` | `The repository has no indexed commit yet` |
+| `422` | The branch or the indexed commit no longer exists, the repository is gone or private, or the host resolves to a private address |
+| `502`, `504` | The host could not be reached, or did not answer within 10 seconds |
+| `503` | GitHub's API rate limit was reached, with `Retry-After` |
 
 ## `GET /api/v1/repositories/{repository_id}/stats`
 

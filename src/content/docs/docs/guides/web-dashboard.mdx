@@ -105,7 +105,7 @@ The same checks and wording apply to `POST /api/v1/repositories/` ([REST API](/d
 The page for `/repository/:id` shows, from top to bottom:
 
 1. A breadcrumb, `Dashboard / owner/repo`. While the live connection is up it adds `Live updates`.
-2. The header: repository name, description, a source link, `Created <date>`, `Indexed at <sha>` (the first 7 characters of the commit the index was built from; hover for the full SHA), a status badge and a **Delete** button. The source link reads **View on GitHub** for github.com and **View source** for any other host. `Indexed at` is missing until a run has fetched the files, and for repositories indexed before commits were recorded.
+2. The header: repository name, description, a source link, `Created <date>`, `Indexed at <sha>` (the first 7 characters of the commit the index was built from; hover for the full SHA), a status badge and a **Delete** button. The source link reads **View on GitHub** for github.com and **View source** for any other host. `Indexed at` is missing until a run has fetched the files, and for repositories indexed before commits were recorded. Once the repository is completed, the header also says whether its branch has moved: `3 commits behind main` on GitHub, `main has changed since` on other hosts (which can't count commits), or `Up to date with main`. When it has moved, a **Reprocess to update** link opens the Reprocess dialog. The page asks once per visit, and the server caches the answer for 10 minutes ([`/freshness`](/docs/reference/rest-api/#get-apiv1repositoriesrepository_idfreshness)). If the host can't be asked, nothing is shown.
 3. Four stat cards.
 4. A status card, which depends on the state (see below).
 5. The search box, with its language and kind filters.
