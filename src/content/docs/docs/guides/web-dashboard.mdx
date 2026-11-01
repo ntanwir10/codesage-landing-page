@@ -15,7 +15,7 @@ import dashboardShot from '~/assets/screenshots/dashboard.png';
 The dashboard is a React app served by Vite at http://localhost:5173 (or by nginx in the Docker stacks). It has four pages and a 404 page. This guide covers each one, the text you see and what happens behind it.
 
 <Mermaid caption="How you move through the dashboard." code={`flowchart TB
-    home["Home<br/>enter owner/repo"] --> page["Repository page<br/>live progress"]
+    home["Home<br/>enter owner/repo or a URL"] --> page["Repository page<br/>live progress"]
     dashboard["Dashboard<br/>all repositories"] --> page
     dashboard --> delete["Delete"]
     page --> outcome{"Run ends"}
@@ -33,7 +33,7 @@ The header shows the CodeSage name and two links, **Home** and **Dashboard**. Th
 
 | Page | Path | What you can do |
 | --- | --- | --- |
-| Home | `/` | Add a GitHub repository |
+| Home | `/` | Add a repository from GitHub or another git host |
 | Repository | `/repository/:id` | Watch progress, search, browse definitions, reprocess, delete |
 | File viewer | `/repository/:id/file?path=…&line=…&end=…` | Read an indexed file with the target lines highlighted |
 | Dashboard | `/dashboard` | See all repositories and delete one |
@@ -41,9 +41,9 @@ The header shows the CodeSage name and two links, **Home** and **Dashboard**. Th
 
 ## Home
 
-<Shot src={homeShot} alt="The CodeSage Home page with the Add GitHub Repository form: a github.com/ prefixed repository field, an optional branch field and an optional description field." caption="Home, with the Add GitHub Repository form." />
+<Shot src={homeShot} alt="The CodeSage Home page with the Add Repository form: a repository field with the placeholder owner/repo or https://gitlab.com/group/project, an optional branch field and an optional description field." caption="Home, with the Add Repository form." />
 
-Home shows the heading "Discover Code with AI", the **Add GitHub Repository** form, a three-step "How it works" strip (Submit Repository, AI Processing, Ask Questions) and two feature cards (Smart Search and Claude Desktop).
+Home shows the heading "Discover Code with AI", the **Add Repository** form, a three-step "How it works" strip (Submit Repository, AI Processing, Search and Ask Claude) and two feature cards (Smart Search and Claude Desktop).
 
 ### Adding a repository
 
@@ -51,19 +51,20 @@ The form has three fields.
 
 | Field | Label | Required | Notes |
 | --- | --- | --- | --- |
-| Repository | `GitHub repository *`, with a fixed `github.com/` prefix | yes | Type `owner/repo`, or paste a GitHub URL. |
+| Repository | `Repository *` (placeholder `owner/repo or https://gitlab.com/group/project`) | yes | Type `owner/repo` for GitHub, or paste a repository URL from GitHub, GitLab, Bitbucket or another git host. |
 | Branch | `Branch` (placeholder `Default branch (leave empty)`) | no | Empty means the repository's default branch. |
 | Description | `Description (optional)` | no | A note shown on the repository page and the dashboard card. |
 
 How the repository field reads what you type:
 
-- The leading `https://`, `http://`, `www.` and `github.com/`, a trailing `/` and a trailing `.git` are removed. `https://github.com/pmndrs/zustand.git` becomes `pmndrs/zustand`.
-- What is left must be two parts joined by `/`, each made of letters, digits, `_`, `.` or `-`. If not, the field shows `Enter owner/repo, for example facebook/react` and the button stays disabled.
-- A valid value shows `Repository: owner/repo` under the field.
-- A URL ending in `/tree/<branch>` doesn't pass this check. Use the Branch field. URLs of other hosts (GitLab, Bitbucket) don't pass either, because the dashboard takes github.com only. To add those, ask Claude to call `add_repository` ([Other git hosts](/docs/guides/other-git-hosts/)).
+- `http://` becomes `https://`, and `git@host:path` becomes `https://host/path`. A trailing `/` is removed.
+- **Another host.** If the first part contains a dot, it's a host name; GitHub owner names can't contain one. `gitlab.com/group/project`, `https://bitbucket.org/team/repo/src/main` and `git@gitlab.com:group/project.git` are sent as https URLs, as long as they have a host and at least two path parts. The server reads the path and branch and refuses what it can't accept ([Other git hosts](/docs/guides/other-git-hosts/)). A URL with a username or password is refused in the browser and never sent.
+- **GitHub.** Otherwise the leading `https://`, `www.` and `github.com/` and a trailing `.git` are removed. `https://github.com/pmndrs/zustand.git` becomes `pmndrs/zustand`. What is left must be two parts joined by `/`, each made of letters, digits, `_`, `.` or `-`, optionally followed by `/tree/<branch>`, from which the server takes the branch.
+- Anything else shows `Enter owner/repo for GitHub, or a repository's https URL` and the button stays disabled.
+- A valid value shows `Repository: owner/repo` for GitHub, or `Repository: <host>/<path>` for another host, under the field.
 - Empty Branch and Description fields are not sent.
 
-Press **Add Repository**. While the server checks GitHub the button reads `Checking repository…`. The server checks the repository and branch on GitHub for up to 10 seconds, with one attempt and no retries, before it creates anything. On success you see a green toast, `Repository added` with `Processing has started. Progress appears on this page.`, and land on the repository page. The repository exists with status `pending` and moves to `processing` almost at once.
+Press **Add Repository**. While the server checks the repository the button reads `Checking repository…`. The server checks the repository and branch, on GitHub's API or with `git ls-remote` for other hosts, for up to 10 seconds, with one attempt and no retries, before it creates anything. On success you see a green toast, `Repository added` with `Processing has started. Progress appears on this page.`, and land on the repository page. The repository exists with status `pending` and moves to `processing` almost at once.
 
 ### When the server refuses a repository
 
@@ -71,7 +72,7 @@ Every refusal appears in red under the repository field. The page stays on Home,
 
 | You see | Status | Cause |
 | --- | --- | --- |
-| `Enter owner/repo, for example facebook/react` | none (checked in the browser) | The text isn't `owner/repo`. No request is sent. |
+| `Enter owner/repo for GitHub, or a repository's https URL` | none (checked in the browser) | The text is neither `owner/repo` nor a repository URL. No request is sent. |
 | `Invalid branch name` | 422 | The branch contains a `..` segment, a NUL character, or starts with `-`. |
 | `String should have at most 100 characters` | 422 | The branch is longer than 100 characters. |
 | `GitHub repository owner/repo was not found. Check the URL; if it's private, the server's GITHUB_TOKEN needs access.` | 422 | The repository doesn't exist, or it's private and the server's token can't read it. |
@@ -241,7 +242,7 @@ The Dashboard page lists every repository.
 | State | What you see |
 | --- | --- |
 | Loading | `Loading your repositories...` |
-| No repositories | `No repositories yet`, `Get started by adding your first GitHub repository to analyze with AI-powered search` and **Add Your First Repository** |
+| No repositories | `No repositories yet`, `Get started by adding your first repository to analyze with AI-powered search` and **Add Your First Repository** |
 | Load failed, nothing cached | `Failed to load repositories`, the error text and **Try Again** |
 | Refresh failed, data cached | `Couldn't refresh. Showing the last loaded data.` above the tiles |
 

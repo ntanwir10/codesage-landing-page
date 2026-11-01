@@ -56,7 +56,7 @@ The bridge validates arguments first (unknown arguments are rejected), then the 
 
 There are two ways in, and both end at the same FastAPI backend.
 
-- **Web dashboard.** You add a GitHub repository, watch it index over a WebSocket (with 3-second polling as a fallback), and search it. The dashboard and the `POST /api/v1/repositories/` endpoint take github.com only.
+- **Web dashboard.** You add a repository from GitHub or another git host, watch it index over a WebSocket (with 3-second polling as a fallback), and search it. The dashboard, `POST /api/v1/repositories/` and the `add_repository` tool take the same URLs.
 - **Claude Desktop.** Claude calls the seven tools through the bridge. Claude can also add public repositories from GitLab, Bitbucket and other git hosts with the `add_repository` tool.
 
 Both entry points reach the same indexing service, so a repository added from Claude shows up in the dashboard and the other way round.

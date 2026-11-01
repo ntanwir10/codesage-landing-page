@@ -32,11 +32,11 @@ Nothing is created until the repository has passed a pre-flight check. The check
     slot --> run["Indexing run"]
 `} />
 
-The dashboard shows every refusal under the repository field and stays on the Home page. The REST endpoint and the dashboard take github.com only. The `add_repository` tool runs the same checks for other hosts.
+The dashboard shows every refusal under the repository field and stays on the Home page. The table lists GitHub's messages; other hosts get the ones in [Other git hosts](/docs/guides/other-git-hosts/#refusal-messages).
 
 | You see | Status | Cause |
 | --- | --- | --- |
-| A message about the URL or branch | 422 | Not a GitHub repository URL, or an invalid branch name |
+| A message about the URL or branch | 422 | Not a repository URL the server accepts, or an invalid branch name |
 | "GitHub repository owner/repo was not found" | 422 | The repository does not exist, or it is private and the server's `GITHUB_TOKEN` cannot read it |
 | "Branch 'x' does not exist", "owner/repo is empty" or "GitHub denied access" | 422 | The branch is missing, the repository has no content, or GitHub refused access |
 | "owner/repo has already been added", with an "Open it" link | 409 | Same URL as an existing repository. Case does not matter. The body also has `repository_id` |
@@ -179,7 +179,7 @@ The service picks the source from the URL's host. `GitHubService` and `GitSource
 - **What is passed through.** Only `PATH`, `SSL_CERT_FILE`, `SSL_CERT_DIR`, `GIT_SSL_CAINFO`, `HTTPS_PROXY`, `https_proxy` and `NO_PROXY` reach git from your environment.
 - **Commit.** After the clone, `git rev-parse HEAD` records the commit that was read.
 - **Errors.** `504` for a timeout, `503` if git cannot start, `404` for a missing branch or repository, `422` for a host that resolves to a non-public address, `502` for any other clone failure.
-- **Names.** Other hosts are named `<host>/<path>`. The REST endpoint takes github.com only. The `add_repository` tool takes any host through the same service function.
+- **Names.** Other hosts are named `<host>/<path>`. The REST endpoint (behind the dashboard form) and the `add_repository` tool both take any host, through the same schema and service function.
 - **Image.** Both backend images install `git`.
 
 The security side of this (URL validation, sandboxing) is in [the security model](/docs/concepts/security/#git-sandboxing-and-url-validation). The user-facing guide is [Other git hosts](/docs/guides/other-git-hosts/).

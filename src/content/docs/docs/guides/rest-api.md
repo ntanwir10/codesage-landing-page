@@ -446,7 +446,7 @@ A validation error from a bad URL looks like this. The 422 body below and the 40
 ```bash
 curl -sS -X POST $BASE/api/v1/repositories/ \
   -H "Content-Type: application/json" -H "X-API-Key: $CODESAGE_API_KEY" \
-  -d '{"url": "https://gitlab.com/group/project"}'
+  -d '{"url": "https://gitlab.com:8443/group/project"}'
 ```
 
 ```json title="422 Unprocessable Entity"
@@ -455,8 +455,8 @@ curl -sS -X POST $BASE/api/v1/repositories/ \
     {
       "type": "invalid_url",
       "loc": ["body", "url"],
-      "msg": "Invalid GitHub URL (host must be github.com): https://gitlab.com/group/project",
-      "input": "https://gitlab.com/group/project"
+      "msg": "Invalid repository URL (ports are not supported): https://gitlab.com:8443/group/project",
+      "input": "https://gitlab.com:8443/group/project"
     }
   ]
 }

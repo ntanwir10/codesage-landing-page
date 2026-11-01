@@ -1,11 +1,11 @@
 ---
 title: Other git hosts
-description: Add public GitLab, Bitbucket and self-hosted repositories through the add_repository tool.
+description: Add public GitLab, Bitbucket and self-hosted repositories from the dashboard, the REST API or the add_repository tool.
 ---
 
-The dashboard and the REST API take github.com only. Claude can also add a public repository from GitLab, Bitbucket or a self-hosted git server by calling the `add_repository` tool. This page covers the URLs it accepts, how the backend reads the repository, the links in search results and every refusal message.
+CodeSage can index a public repository from GitLab, Bitbucket or a self-hosted git server, as well as GitHub. The dashboard's Home form, `POST /api/v1/repositories/` and Claude's `add_repository` tool all take the same URLs and run the same checks. This page covers the URLs they accept, how the backend reads the repository, the links in search results and every refusal message.
 
-Ask Claude something like:
+In the dashboard, paste the URL (for example `https://gitlab.com/group/project`) into the Home page form. Typing `owner/repo` without a host still means GitHub. From Claude, ask something like:
 
 > Add https://gitlab.com/group/project to CodeSage.
 
@@ -13,7 +13,7 @@ Claude calls `add_repository`, which returns `repository_id`, `name`, `status` a
 
 ## Accepted URL forms
 
-The URL must be an `https` URL on a public host. The tool also accepts `http://` (rewritten to `https://`) and `git@host:path` (rewritten to `https://host/path`).
+The URL must be an `https` URL on a public host. The form, the REST API and the tool also accept `http://` (rewritten to `https://`) and `git@host:path` (rewritten to `https://host/path`).
 
 | Host | URL | Result |
 | --- | --- | --- |
@@ -117,7 +117,7 @@ The link points at the commit that was indexed, so its line numbers stay right a
 
 ## Refusal messages
 
-For a non-GitHub URL, `add_repository` returns one of these, and nothing is created. (For github.com URLs, the tool uses GitHub's check and the messages in [the dashboard guide](/docs/guides/web-dashboard/#when-the-server-refuses-a-repository).)
+For a non-GitHub URL the check refuses with one of these, and nothing is created. The dashboard shows it under the repository field, the REST API returns it as `detail`, and `add_repository` returns it as a tool error. (github.com URLs use GitHub's check and the messages in [the dashboard guide](/docs/guides/web-dashboard/#when-the-server-refuses-a-repository).)
 
 | Message | Cause |
 | --- | --- |
@@ -151,7 +151,7 @@ Fix the cause and reprocess from the repository page.
 ## Limits
 
 - **Public only** on every host except github.com.
-- **Not in the dashboard.** The web form and `POST /api/v1/repositories/` refuse other hosts with `422` and a message that the host must be github.com.
+- **Redirects.** git follows a host's first HTTP redirect without re-checking where it points, so a hostile public host could send it to an internal address. Route the backend through an egress proxy that refuses private addresses if that matters.
 - **Tool limits.** `add_repository` needs the API key like every tool call and counts toward the 30 per minute limit.
 - **Clone size.** A shallow clone of a huge repository must finish in 120 seconds and fit the 1000-file and 100 MB selection.
 
