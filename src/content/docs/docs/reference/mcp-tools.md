@@ -1,9 +1,9 @@
 ---
 title: MCP tools reference
-description: Arguments, constraints, result shapes, limits and errors for the seven CodeSage MCP tools and the two resources.
+description: Arguments, constraints, result shapes, limits and errors for the eight CodeSage MCP tools and the two resources.
 ---
 
-CodeSage serves seven tools and two resources to any MCP client. Claude Desktop reaches them through a stdio bridge that forwards each call to the backend over HTTP. This page lists every argument, every result field and every error message the tools produce. For the HTTP side of the same calls, see [MCP HTTP endpoints](/docs/reference/mcp-endpoints/). For setup, see [Claude Desktop](/docs/guides/claude-desktop/).
+CodeSage serves eight tools and two resources to any MCP client. Claude Desktop reaches them through a stdio bridge that forwards each call to the backend over HTTP. This page lists every argument, every result field and every error message the tools produce. For the HTTP side of the same calls, see [MCP HTTP endpoints](/docs/reference/mcp-endpoints/). For setup, see [Claude Desktop](/docs/guides/claude-desktop/).
 
 Argument schemas live in [`backend/codesage_mcp/schemas.py`](https://github.com/ntanwir10/codesage-algolia-challenge/blob/master/backend/codesage_mcp/schemas.py). The bridge answers `tools/list` from that file, so the list works even while the backend is down. Only tool calls and resource reads need the backend.
 
@@ -17,6 +17,7 @@ Argument schemas live in [`backend/codesage_mcp/schemas.py`](https://github.com/
 | [`list_definitions`](#list_definitions) | SQLite | Yes | `repository` | Entities ordered by file and line |
 | [`analyze_repository`](#analyze_repository) | SQLite | Yes | `repository` | Counts, languages, top directories, largest files |
 | [`find_patterns`](#find_patterns) | SQLite | Yes | `repository`, `pattern` | Lines matching a literal string or regular expression |
+| [`find_references`](#find_references) | SQLite | Yes | `repository`, `name` | A name's definitions, then its whole-word uses with the enclosing function or class |
 | [`add_repository`](#add_repository) | Git host, SQLite | No | `url` | The new repository's ID and status; indexing continues in the background |
 
 Every tool call counts toward the rate limit of 30 per minute per client address. See [Configuration](/docs/reference/configuration/#rate-limits).
@@ -554,6 +555,64 @@ Real output for `repository: "pmndrs/zustand"`, `pattern: "createStoreImpl"` and
 
 > In octo/demo, find every place that matches `TODO|FIXME` in Python files under backend/, as a regular expression.
 
+## `find_references`
+
+Finds where a function, class or other name is defined and used. Use it to see who calls a function, or what imports a class. It's a whole-word text match, not a compiler, so comments, strings and Markdown count as uses too.
+
+### Arguments
+
+| Argument | Type | Required | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `repository` | string | Yes | none | See [Resolving the repository argument](#resolving-the-repository-argument) |
+| `name` | string | Yes | none | One identifier: letters, digits, `_` and `$`, not starting with a digit, at most 200 characters. No dots; for a method, pass the method's name |
+| `path_glob` | string | No | none | Only files whose whole path matches, as in [`find_patterns`](#find_patterns). It scopes the definitions too |
+| `max_results` | integer | No | `100` | 1 to 500 uses |
+
+### Result
+
+| Field | Meaning |
+| --- | --- |
+| `definitions[]` | Indexed functions and classes named exactly `name`: `entity_type`, `file_path`, `line_start`, `line_end`, `signature` |
+| `references[]` | Each use: `file_path`, `line`, `text` (trimmed, at most 300 characters), `kind` and `in` |
+| `kind` | `import` when the line sits inside an indexed import, else `reference` |
+| `in` | The innermost function or class containing the line, or `null` at the top level and in docs |
+| `total_references`, `files` | How many uses were returned, and in how many files |
+| `truncated` | `true` when more uses exist than `max_results`, or the time budget ran out |
+
+- **Matching.** Case-sensitive and whole-word. `$` counts as part of a name, so `store` doesn't match `$store` or `storeKey`.
+- **Definition lines** are left out of the uses and don't take a `max_results` slot.
+- **Order.** Source files first, then tests, then Markdown and other files, each in path order. That's the indexer's order, so with a small `max_results` the code comes first.
+- **Limits.** The same as a regex [`find_patterns`](#find_patterns): 1 second per file, 10 seconds per call, files over 1,000,000 characters skipped and listed in `skipped_files`.
+
+Real output for `createImpl` in `pmndrs/zustand`:
+
+```json title="find_references"
+{
+  "repository": "pmndrs/zustand",
+  "name": "createImpl",
+  "definitions": [
+    {"entity_type": "function", "file_path": "src/react.ts", "line_start": 53, "line_end": 61, "signature": "const createImpl = <T>(createState: StateCreator<T, [], []>) => {"}
+  ],
+  "total_references": 1,
+  "files": 1,
+  "truncated": false,
+  "references": [
+    {"file_path": "src/react.ts", "line": 64, "text": "createState ? createImpl(createState) : createImpl) as Create", "kind": "reference", "in": "create"}
+  ]
+}
+```
+
+### Errors
+
+| Message | Cause |
+| --- | --- |
+| `Invalid arguments for 'find_references': name: String should match pattern ...` | `name` is not a single identifier, refused by the bridge before any request |
+| Repository errors | See [Resolving the repository argument](#resolving-the-repository-argument) |
+
+### Example prompt
+
+> In pmndrs/zustand, where is `createStore` used, and which functions call it?
+
 ## `add_repository`
 
 Adds a repository by `https` URL and starts indexing it in the background. It works with GitHub, GitLab (nested groups too), Bitbucket and self-hosted git servers. It runs the same pre-flight checks as the REST endpoint, and nothing is created if a check fails.
@@ -674,7 +733,7 @@ The bridge answers `prompts/list` and `prompts/get` on its own, so prompts work 
 | Prompt | Title | Arguments | Steers Claude to |
 | --- | --- | --- | --- |
 | `explain_repository` | Explain this repository | `repository` (required) | [`analyze_repository`](#analyze_repository), then [`list_definitions`](#list_definitions) (with `path_prefix`, and `entity_type: "doc_section"` for docs), then [`get_file`](#get_file) on the README and central files. The answer covers what the repository does, its layout and main parts, and where to start reading, citing paths and lines |
-| `find_implementation` | Where is this implemented? | `feature` (required), `repository` (optional) | [`search_code`](#search_code), then `list_definitions` around the best hits, then `get_file` to confirm. The answer gives files, line ranges and source links, or says nothing matched. An empty `repository` searches every repository |
+| `find_implementation` | Where is this implemented? | `feature` (required), `repository` (optional) | [`search_code`](#search_code), then `list_definitions` around the best hits and [`find_references`](#find_references) on a key function or class, then `get_file` to confirm. The answer gives files, line ranges and source links, or says nothing matched. An empty `repository` searches every repository |
 
 Arguments are trimmed, and a blank one counts as missing. Errors are MCP protocol errors:
 

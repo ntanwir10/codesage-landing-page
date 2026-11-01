@@ -11,6 +11,7 @@ const tools = [
 	['list_definitions', 'Definitions by file and line, filtered by path prefix, type or name.', 'Up to 500'],
 	['analyze_repository', 'File, line and entity counts, languages, top directories and largest files.', 'Counts only'],
 	['find_patterns', 'Literal or regex line matches across the repository.', 'Regex stops at 10 s'],
+	['find_references', 'Where a name is defined and used, with the function or class each use sits in.', 'Whole-word text match'],
 	['add_repository', 'Adds a repository by https URL, from GitHub or a public GitLab, Bitbucket or self-hosted server, and starts indexing.', 'Needs the API key'],
 ];
 
@@ -56,7 +57,7 @@ make install-claude   # add CodeSage to Claude Desktop, then restart it`;
 	frontmatter={{
 		title: 'CodeSage: search your codebase from Claude',
 		description:
-			'CodeSage indexes a repository into Algolia and serves it to Claude Desktop as seven MCP tools, with a live web dashboard. Self-hosted and open source.',
+			'CodeSage indexes a repository into Algolia and serves it to Claude Desktop as eight MCP tools, with a live web dashboard. Self-hosted and open source.',
 		template: 'splash',
 		hero: { title: 'CodeSage' },
 		tableOfContents: false,
@@ -134,7 +135,7 @@ make install-claude   # add CodeSage to Claude Desktop, then restart it`;
 
 	<section class="cs-section not-content" aria-labelledby="tools">
 		<p class="cs-kicker">For Claude</p>
-		<h2 id="tools">Seven MCP tools</h2>
+		<h2 id="tools">Eight MCP tools</h2>
 		<p class="cs-intro">
 			Claude Desktop starts a small stdio bridge that turns each tool call into an HTTP request to the
 			backend. The bridge answers <code>tools/list</code> itself, so the tools show up even while the
