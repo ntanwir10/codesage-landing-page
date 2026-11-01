@@ -204,7 +204,7 @@ Without a start line, the link points at the file with no line anchor. In the da
 
 ## Waits and timeouts
 
-Indexing and deleting return a task ID. The Algolia v3 client's `wait()` polls forever, and Algolia can leave a task unpublished indefinitely, so CodeSage polls `get_task` itself with a deadline.
+Indexing and deleting return a task ID. Algolia can leave a task unpublished indefinitely, so CodeSage polls `get_task` itself with a deadline.
 
 | Operation | Behaviour | Deadline |
 | --- | --- | --- |
@@ -212,13 +212,13 @@ Indexing and deleting return a task ID. The Algolia v3 client's `wait()` polls f
 | Delete before a reprocess | Waits for the `delete_by` task | 120 s. On timeout the run fails, to avoid stale records |
 | Plain repository delete | Sends `delete_by` and does not poll | None. Algolia applies an index's tasks in order |
 | Index settings | Not waited on | None |
-| `/health` Algolia probe | `list_indices` in a worker thread | 5 s, and the result is cached for 30 s |
+| `/health` Algolia probe | a `GET 1/indexes` request (`custom_get`; v4's `list_indices` model rejects this API's response) in a worker thread | 5 s, and the result is cached for 30 s |
 
 The poll starts at 0.1 s and doubles up to 2 s between calls.
 
 ## Threads and clients
 
-The v3 `algoliasearch` client is synchronous. Calling it directly from an async handler would freeze the event loop, and with it the API, the WebSocket and every tool call, for the length of an Algolia round trip. Each call therefore runs in a worker thread through `asyncio.to_thread`.
+CodeSage uses the synchronous v4 `algoliasearch` client (`SearchClientSync`), behind a small adapter with the index methods the service has always used. Calling it directly from an async handler would freeze the event loop, and with it the API, the WebSocket and every tool call, for the length of an Algolia round trip. Each call therefore runs in a worker thread through `asyncio.to_thread`.
 
 `AlgoliaService` is built per request, but the client is not. `_client_for` keeps one client per `(app_id, api_key)` pair, because each client owns an HTTP connection pool and a fresh client on every request would never reuse a connection.
 

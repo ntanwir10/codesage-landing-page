@@ -155,7 +155,7 @@ SQLite adds a fifth reason: it allows one writer at a time. WAL mode lets reader
 Inside that one process, blocking work is moved off the event loop so the API, WebSocket and tool calls stay responsive while a repository indexes:
 
 - Parsing runs in a worker thread (`asyncio.to_thread`).
-- The Algolia client (v3) is synchronous, so each call runs in a worker thread too.
+- The Algolia client (v4 `SearchClientSync`) is synchronous, so each call runs in a worker thread too.
 - Database commits for a batch and the bulk delete before a reprocess run in worker threads.
 - `find_patterns` regex scans run in a thread with a per-file and a per-call time budget.
 
@@ -192,7 +192,7 @@ When uvicorn imports `app.main`, some work happens at import time and the rest i
 5. **Crash recovery.** Jobs run inside the process, so a run left open by a previous process died with it. `recover_interrupted_jobs` sets every repository still `pending` or `processing` to `failed` with "Processing was interrupted by a server restart; reprocess the repository". Nothing retries on its own.
 6. **Algolia check.** Missing credentials log an error but do not stop the server. `/health` then reports `degraded`, and adding a repository returns `503`.
 
-`/health` runs a database `SELECT 1` and, at most once every 30 seconds, an Algolia `list_indices` call with a 5 s limit. A database failure gives `503 unhealthy`. Algolia down or not configured gives `200 degraded`, so a container health check stays green while you finish configuring Algolia.
+`/health` runs a database `SELECT 1` and, at most once every 30 seconds, an Algolia `GET 1/indexes` request with a 5 s limit. A database failure gives `503 unhealthy`. Algolia down or not configured gives `200 degraded`, so a container health check stays green while you finish configuring Algolia.
 
 ## Tech stack
 
@@ -205,7 +205,7 @@ Backend versions are pinned in [`backend/requirements.txt`](https://github.com/n
 | Server | uvicorn (standard extras) | 0.54.0 |
 | Database | SQLite through SQLAlchemy | 2.1.6 |
 | Migrations | Alembic | 1.20.1 |
-| Search | Algolia (`algoliasearch`, v3 client) | 3.0.0 |
+| Search | Algolia (`algoliasearch`, v4 synchronous client) | 4.48.0 |
 | GitHub client | aiohttp | 3.14.5 |
 | Settings | pydantic and pydantic-settings | 2.14.1 and 2.16.1 |
 | Logging | structlog | 26.1.0 |
