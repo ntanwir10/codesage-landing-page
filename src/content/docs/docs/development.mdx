@@ -97,6 +97,20 @@ cd frontend && npx vitest        # watch mode
 
 Vitest uses jsdom with globals on, and `src/test/setup.ts` as its setup file. Tests sit next to the code they cover as `*.test.ts` or `*.test.tsx`: the four pages, the `useRealtimeStatus` hook, `ErrorBoundary`, `services/api` and `services/websocket`, and the `lib` helpers for errors, polling and the query client. They are unit tests, with no browser and no backend.
 
+### End-to-end
+
+```bash
+cd frontend && npx playwright install chromium   # once: the browser Playwright drives
+cd frontend && npm run test:e2e                  # playwright test
+```
+
+Playwright (`frontend/playwright.config.ts`) starts its own stack and never reuses a running server, so your dev servers and data are never touched:
+
+- **Backend** on port 8011. `frontend/e2e/seed.py` first writes a fresh `codesage-e2e.db` in the OS temp directory: one completed repository, `e2e/demo`, with two files and their definitions. The seed refuses any other database. `ALGOLIA_*`, `CODESAGE_API_KEY` and `GITHUB_TOKEN` are set to empty, which overrides `backend/.env`. The repository's host is `.invalid`, so nothing reaches GitHub, GitLab or Algolia.
+- **Vite** on port 5183, proxying to that backend through `CODESAGE_BACKEND_URL`, with no API key in the bundle.
+
+The specs are `frontend/e2e/*.e2e.ts`, a name Vitest doesn't pick up, and they run in Chromium with one worker. They cover the Home form (validation, the GitLab preview, and the server's "Search indexing is not configured" refusal shown inline), the dashboard and repository page, and the definitions browser opening the file viewer at the highlighted lines. Search, the freshness line and indexing are not covered: they need Algolia or GitHub. Set `E2E_PYTHON` when the backend's Python isn't `../.venv/bin/python` (CI uses `python`).
+
 ## Lint and build
 
 ```bash
@@ -116,6 +130,7 @@ The workflow is [`.github/workflows/ci.yml`](https://github.com/ntanwir10/codesa
 | --- | --- |
 | `backend` (working directory `backend`) | Check out. Set up Python 3.13 with the pip cache keyed on `backend/requirements*.txt`. `pip install -r requirements-dev.txt`. `ruff check . ../scripts`. `python -m pytest` |
 | `frontend` (working directory `frontend`) | Check out. Set up Node 22 with the npm cache keyed on `package-lock.json`. `npm ci`. `npm run lint`. `npm run build`. `npm test --if-present` |
+| `e2e` (working directory `frontend`) | Check out. Set up Python 3.13 and `pip install -r ../backend/requirements.txt`. Set up Node 22. `npm ci`. `npx playwright install --with-deps chromium`. `npm run test:e2e` with `E2E_PYTHON=python`. On a failure, upload `frontend/test-results/` (the Playwright traces) as an artifact |
 | `docker` | Check out. Write a throwaway `backend/.env` (Compose reads it through `env_file`) with a CI-only `CODESAGE_API_KEY` and fake Algolia keys. `docker compose -f deployment/docker-compose.yml config -q`. The same for `docker-compose.prod.yml`. `docker build -f backend/Dockerfile.prod backend`. `nginx -t` on the dev config, with `backend` mapped to a dummy address. `nginx -t` on the rendered prod template, using a throwaway certificate, htpasswd and key. Then the dev stack smoke test (below) |
 
 The smoke test runs `docker compose -f deployment/docker-compose.yml up -d --build`, which builds both dev images, and then checks four things:
