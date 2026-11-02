@@ -169,6 +169,16 @@ The dashboard has no hot reload in this stack, because the bundle is built into 
 
 Both stacks publish port 80, so start only one. Stop the other with `docker compose -f <file> down`.
 
+## Indexing workers (optional)
+
+By default the backend container runs indexing itself. To move it into separate workers, start the `workers` profile with `INDEX_WORKERS=external`:
+
+```bash
+INDEX_WORKERS=external docker compose -f deployment/docker-compose.yml --profile workers up -d --build --scale worker=2
+```
+
+The backend then only queues jobs, and each `worker` container (`python -m app.worker`) claims one at a time. They share the SQLite volume and start once the backend is healthy, since it applies the migrations. Workers on more than one machine need Postgres (`DATABASE_URL`).
+
 ## What CI checks
 
 CI validates the dev Compose file with `docker compose config -q` and the dev nginx config with `nginx -t`. It then starts this stack with a throwaway `backend/.env` (fake Algolia keys). It checks that the backend answers `/health`, that nginx serves the app at `/`, and that nginx proxies `/health` and an API call to the backend, then tears the stack down. It never adds a repository, so indexing inside Docker (Algolia, and `git` for other hosts) is not covered. The [development guide](/docs/development/) lists every step.

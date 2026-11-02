@@ -51,7 +51,8 @@ Without Algolia credentials the backend still starts. Adding or reprocessing a r
 
 | Variable | Default | Type | Effect |
 | --- | --- | --- | --- |
-| `DATABASE_URL` | `sqlite:///./codesage.db` | URL | SQLite is the supported database. Migrations run at startup. File databases use WAL mode with foreign keys on |
+| `DATABASE_URL` | `sqlite:///./codesage.db` | URL | SQLite by default; file databases use WAL mode with foreign keys on. Postgres with `postgresql://user:password@host:5432/db` (mapped to the bundled psycopg 3 driver). Migrations run at startup on either. Use Postgres for workers on more than one machine |
+| `INDEX_WORKERS` | `inline` | `inline` or `external` | Who runs indexing jobs. `inline`: the API process. `external`: the API only queues them in the `jobs` table, and `python -m app.worker` processes run them (start them after the API, which applies the migrations). A worker silent for 5 minutes has its job queued again |
 | `SQL_ECHO` | `false` | boolean | `true` logs every SQL statement |
 
 ### Rate limits
