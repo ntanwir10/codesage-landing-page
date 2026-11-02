@@ -3,7 +3,7 @@ title: MCP tools reference
 description: Arguments, constraints, result shapes, limits and errors for the eight CodeSage MCP tools and the two resources.
 ---
 
-CodeSage serves eight tools and two resources to any MCP client. Claude Desktop reaches them through a stdio bridge that forwards each call to the backend over HTTP. This page lists every argument, every result field and every error message the tools produce. For the HTTP side of the same calls, see [MCP HTTP endpoints](/docs/reference/mcp-endpoints/). For setup, see [Claude Desktop](/docs/guides/claude-desktop/).
+CodeSage serves eight tools and two resources to any MCP client. A client reaches them through a stdio bridge that forwards each call to the backend over HTTP. This page lists every argument, every result field and every error message the tools produce. For the HTTP side of the same calls, see [MCP HTTP endpoints](/docs/reference/mcp-endpoints/). For setup, see [MCP clients](/docs/guides/claude-desktop/).
 
 Argument schemas live in [`backend/codesage_mcp/schemas.py`](https://github.com/ntanwir10/codesage-algolia-challenge/blob/master/backend/codesage_mcp/schemas.py). The bridge answers `tools/list` from that file, so the list works even while the backend is down. Only tool calls and resource reads need the backend.
 
@@ -25,7 +25,7 @@ Every tool call counts toward the rate limit of 30 per minute per client address
 ### Shared rules
 
 - **Unknown arguments are rejected.** Every argument model sets `additionalProperties: false`. The bridge checks arguments first, and the backend checks them again.
-- **Failures are tool errors.** A failure the caller can act on (an unknown repository, a repository still indexing) comes back as a tool result with `is_error: true` and a one-line message. Transport and HTTP failures also come back as tool errors; see [How failures reach Claude](/docs/reference/mcp-endpoints/#how-failures-reach-claude).
+- **Failures are tool errors.** A failure the caller can act on (an unknown repository, a repository still indexing) comes back as a tool result with `is_error: true` and a one-line message. Transport and HTTP failures also come back as tool errors; see [How failures reach your assistant](/docs/reference/mcp-endpoints/#how-failures-reach-your-assistant).
 - **Results are JSON text.** The bridge returns the `result` object as pretty-printed JSON in one text block.
 
 ## Resolving the `repository` argument
@@ -119,7 +119,7 @@ The real result, from a backend holding one finished and one failed repository. 
 
 ### Limits and errors
 
-The list is not paged or truncated. This tool has no tool-level errors beyond the transport failures in [How failures reach Claude](/docs/reference/mcp-endpoints/#how-failures-reach-claude).
+The list is not paged or truncated. This tool has no tool-level errors beyond the transport failures in [How failures reach your assistant](/docs/reference/mcp-endpoints/#how-failures-reach-your-assistant).
 
 ### Example prompt
 
@@ -729,9 +729,9 @@ Resource reads fail as MCP protocol errors, not tool errors. The backend answers
 
 ## Prompts
 
-The bridge answers `prompts/list` and `prompts/get` on its own, so prompts work with the backend down and need no key. Each prompt returns one user message that tells Claude which tools to call, in what order, and what to answer with.
+The bridge answers `prompts/list` and `prompts/get` on its own, so prompts work with the backend down and need no key. Each prompt returns one user message that tells the assistant which tools to call, in what order, and what to answer with.
 
-| Prompt | Title | Arguments | Steers Claude to |
+| Prompt | Title | Arguments | Steers the assistant to |
 | --- | --- | --- | --- |
 | `explain_repository` | Explain this repository | `repository` (required) | [`analyze_repository`](#analyze_repository), then [`list_definitions`](#list_definitions) (with `path_prefix`, and `entity_type: "doc_section"` for docs), then [`get_file`](#get_file) on the README and central files. The answer covers what the repository does, its layout and main parts, and where to start reading, citing paths and lines |
 | `find_implementation` | Where is this implemented? | `feature` (required), `repository` (optional) | [`search_code`](#search_code), then `list_definitions` around the best hits and [`find_references`](#find_references) on a key function or class, then `get_file` to confirm. The answer gives files, line ranges and source links, or says nothing matched. An empty `repository` searches every repository |

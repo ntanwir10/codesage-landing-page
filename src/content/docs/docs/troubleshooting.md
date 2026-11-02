@@ -1,6 +1,6 @@
 ---
 title: Troubleshooting
-description: Symptoms, causes and fixes for setup, the dashboard, indexing, Claude Desktop, both Docker stacks and Algolia, plus where to look first.
+description: Symptoms, causes and fixes for setup, the dashboard, indexing, MCP clients, both Docker stacks and Algolia, plus where to look first.
 ---
 
 Find your symptom in the section for the part that is failing. Messages are quoted as the code writes them, so you can search this page for what you see. If nothing matches, go to [Where to look](#where-to-look).
@@ -91,8 +91,8 @@ The bridge writes to stderr, which your MCP client saves in its MCP log (Cursor 
 | `.venv/bin/python not found` or "the Python dependencies are missing" (launcher) | No virtualenv, or the dependencies are not installed in it | `make setup` |
 | "no Keychain password found for ..." (launcher) | `CODESAGE_BASIC_AUTH_USER` is set but its Keychain entry is missing | Re-run the installer with `--basic-auth USER` |
 | "CodeSage backend not reachable at ..." | Backend not running, or `MCP_SERVER_URL` is wrong. `tools/list` still works | `make start-backend`, or correct the URL |
-| "rejected the API key (401)" | `CODESAGE_API_KEY` in the client's config differs from `backend/.env` | Re-run `make install-claude` (or your client's target), then restart Claude Desktop |
-| "No API key is configured; set CODESAGE_API_KEY in the MCP server's env ..." | The backend needs a key and the client's config has none. For a local backend the launcher also found none in `backend/.env` | Re-run `make install-claude` |
+| "rejected the API key (401)" | `CODESAGE_API_KEY` in the client's config differs from `backend/.env` | Re-run `make install-claude` (or your client's target), then restart the client |
+| "No API key is configured; set CODESAGE_API_KEY in the MCP server's env ..." | The backend needs a key and the client's config has none. For a local backend the launcher also found none in `backend/.env` | Re-run `make install-claude` (or your client's target) |
 | "The proxy in front of CodeSage rejected the login (401)" | Wrong user, or no Keychain entry for it | Re-run the installer with `--basic-auth USER` and enter the password |
 | "Refusing to send the CodeSage key or login over plain http to ..." | A remote `http://` URL with a key or login | Use `https://`, or set `CODESAGE_ALLOW_INSECURE_AUTH=1` on a trusted network |
 | "refused the request (403)" | The backend runs on another host and its `Host` is not allowed | Add the host to `ALLOWED_HOSTS` on the backend and check `MCP_SERVER_URL` |
@@ -135,7 +135,7 @@ The bridge writes to stderr, which your MCP client saves in its MCP log (Cursor 
 | Writes or the WebSocket get `403` from a browser | The origin is neither the API's own nor in `CORS_ORIGINS` | Add the full origin, such as `https://host`, to the Compose file and restart |
 | Browser asks for a login on every request | Wrong user or password in `htpasswd` | Recreate the file and restart nginx |
 | Browser shows a certificate warning | The certificate is self-signed | Trust it, or use a real certificate |
-| Claude Desktop cannot reach prod | The bridge refuses plain `http://`, or does not trust a self-signed certificate | Use `https://`, and add `SSL_CERT_FILE` to the bridge's `env` |
+| The MCP client cannot reach prod | The bridge refuses plain `http://`, or does not trust a self-signed certificate | Use `https://`, and add `SSL_CERT_FILE` to the bridge's `env` |
 | `429` for everyone at once | Limits count per client address. Clients that reach the backend through a proxy that does not forward the real address share one count | Behind the prod nginx the address comes from `X-Forwarded-For`, which nginx sets. Do not publish the backend port |
 
 ## Algolia
@@ -157,7 +157,7 @@ The bridge writes to stderr, which your MCP client saves in its MCP log (Cursor 
 
 - **Backend log.** structlog writes one JSON object per line, with `timestamp`, `level`, `event` and any context such as `request_id`. Locally it is the terminal where uvicorn runs (`make start-backend`). In Docker use `make logs-backend` for dev, or `docker compose -f deployment/docker-compose.prod.yml logs -f backend` for prod. Set `LOG_LEVEL=DEBUG` for more.
 - **`X-Request-ID`.** Every response has this header, including `403` responses. A `500` also returns it as `request_id` in the body. Search the backend log for that ID to find the traceback. You can send your own `X-Request-ID` and it will be reused.
-- **The MCP log.** Claude Desktop saves the bridge's stderr. On macOS it is `~/Library/Logs/Claude/mcp-server-codesage.log`. The file is named after the key under `mcpServers`, so an entry made with `--name` has its own log. Set `CODESAGE_MCP_LOG_LEVEL=DEBUG` in the entry's `env` for more detail.
+- **The MCP log.** Your MCP client saves the bridge's stderr (Cursor and VS Code show it in the Output panel). For Claude Desktop on macOS it is `~/Library/Logs/Claude/mcp-server-codesage.log`. The file is named after the key under `mcpServers`, so an entry made with `--name` has its own log. Set `CODESAGE_MCP_LOG_LEVEL=DEBUG` in the entry's `env` for more detail.
 - **`/health`.** `curl http://127.0.0.1:8001/health` (or `curl -k https://your-host/health` in prod). The body lists `database` and `algolia` components. `unhealthy` is `503`; `degraded` is `200`.
 - **The status endpoint.** `GET /api/v1/repositories/{id}/status` returns `status`, `processed_files`, `total_files`, `progress` and `error_message`. `GET /api/v1/repositories/` lists all of them.
 - **MCP checks.** `make test-mcp` calls the capabilities and tool-list endpoints. The MCP Inspector (`npx @modelcontextprotocol/inspector ./mcp_launcher.sh`) lets you call a tool by hand.

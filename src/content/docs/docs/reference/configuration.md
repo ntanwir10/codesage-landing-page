@@ -132,7 +132,7 @@ The dev server proxies `/api`, `/ws` and `/health` to `http://127.0.0.1:8001`, a
 
 ## Bridge environment
 
-The stdio bridge (`python -m codesage_mcp`) does not read `backend/.env`. Claude Desktop sets these from the `env` block of its config. The one exception is the launcher, `mcp_launcher.sh`: when `CODESAGE_API_KEY` is empty, no basic-auth user is set and `MCP_SERVER_URL` is a loopback `http://` URL (or unset), it reads the key from `backend/.env` before starting the bridge. `make install-claude` writes `MCP_SERVER_URL` and `CODESAGE_API_KEY` there.
+The stdio bridge (`python -m codesage_mcp`) does not read `backend/.env`. Your MCP client sets these from the `env` block of its config. The one exception is the launcher, `mcp_launcher.sh`: when `CODESAGE_API_KEY` is empty, no basic-auth user is set and `MCP_SERVER_URL` is a loopback `http://` URL (or unset), it reads the key from `backend/.env` before starting the bridge. `make install-claude` (or your client's target) writes `MCP_SERVER_URL` and `CODESAGE_API_KEY` there.
 
 | Variable | Default | Effect |
 | --- | --- | --- |
