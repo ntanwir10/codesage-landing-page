@@ -138,7 +138,7 @@ curl -sS http://127.0.0.1:8001/api/v1/ai/mcp/capabilities
 {
   "name": "codesage",
   "version": "1.0.0",
-  "capabilities": {"tools": true, "resources": true, "prompts": false},
+  "capabilities": {"tools": true, "resources": true, "prompts": true},
   "tools": [
     "list_repositories",
     "search_code",
@@ -146,6 +146,7 @@ curl -sS http://127.0.0.1:8001/api/v1/ai/mcp/capabilities
     "list_definitions",
     "analyze_repository",
     "find_patterns",
+    "find_references",
     "add_repository"
   ]
 }
