@@ -81,7 +81,6 @@ These are limits of the current code, not bugs waiting for a fix. Each row says 
 | **`find_patterns` has time limits.** A regex gets 1 s per file and 10 s per call. Files over 1,000,000 characters are skipped. A pattern is at most 200 characters. | The `regex` module's timeouts guard against catastrophic patterns | Use a literal search, which has no time limit, or a narrower `path_glob` |
 | **`list_definitions` returns at most 500 definitions** and `search_code` at most 50 per page. A `search_code` query is at most 512 bytes. | Argument limits in the schema | Page through, or narrow the filters |
 | **The files resource lists the first 5000 files.** | `MAX_RESOURCE_FILES` | `truncated` tells you |
-| **Tools and resources only.** No prompts. | The server declares `prompts: false` | None |
 | **`--basic-auth` and the Keychain are macOS only.** | They use the `security` command | Set `CODESAGE_BASIC_AUTH_PASSWORD` in the bridge's `env` |
 | **Tool calls are limited to 30 a minute per address.** | `RATE_LIMIT_AI` | Raise `RATE_LIMIT_AI` or wait |
 
