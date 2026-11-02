@@ -9,14 +9,14 @@ These are limits of the current code, not bugs waiting for a fix. Each row says 
 
 | Limitation | Why | Workaround |
 | --- | --- | --- |
-| **Exactly one backend worker.** | Job state (`_jobs`), the two-run limit, WebSocket subscriptions and rate-limit counters live in the process. SQLite allows one writer. A second worker would not see the first one's jobs or broadcasts | Use a bigger machine, not more workers. Do not raise `--workers` |
-| **SQLite only.** `DATABASE_URL` must be a SQLite URL. | The migrations use SQLite batch mode, the engine sets SQLite pragmas, and the single-writer limit matches the single worker | None. Moving to another database means changing the engine setup and the migrations |
+| **Exactly one API process.** | WebSocket subscriptions, rate-limit counters and caches live in it | Move indexing out of it instead: `INDEX_WORKERS=external` with any number of `python -m app.worker` processes ([Configuration](/docs/reference/configuration/)) |
+| **SQLite by default; Postgres is less tested.** | CI runs the migrations, column types and the job claim against Postgres 16; the rest of the suite runs on SQLite | Set `DATABASE_URL=postgresql://…` and check your workload |
 | **No high availability.** | One process, one file | Back up the database volume, and keep in mind that reprocessing rebuilds everything from the source host |
-| **No automatic retry.** A failed or interrupted run waits for you to reprocess it. | A restart cannot know whether a half-finished run is safe to continue. Start-up marks it `failed` | Reprocess from the dashboard, or `POST /api/v1/repositories/{id}/process` |
-| **No sync with upstream.** Changes pushed to a repository are not picked up. | Nothing watches the source host. There are no webhooks or schedules | Reprocess when you want fresh data |
+| **A failed run is not retried.** An interrupted one is: start-up runs it again in full. | A failure usually needs a fix (a branch, a key, a host); an interruption doesn't | Reprocess from the dashboard, or `POST /api/v1/repositories/{id}/process` |
+| **Upstream changes arrive only on a schedule or a reprocess.** | There are no webhooks; the scheduled refresh (`REFRESH_INTERVAL_MINUTES`, off by default) checks branches | Turn the refresh on, or reprocess |
 | **Rate limits are per client address and in memory.** They reset on restart. | slowapi default storage, with no shared store | Everything behind one address shares one count. 30 per minute applies to tool calls |
 | **Dev and prod stacks cannot run together.** | Both publish port 80 | Stop one before starting the other |
-| **Dev hot reload kills a running index.** | `--reload` restarts the process, and start-up marks open runs `failed`, even a reprocess whose previous index is intact. The scheduled refresh skips failed repositories | Reprocess, and avoid saving files during a run |
+| **Dev hot reload restarts a running index.** | `--reload` restarts the process, and start-up runs interrupted jobs again in full | Avoid saving files during a run, or use external workers |
 | **Semantic search needs your own embeddings key, and ranks by brute force.** Repositories indexed before the key was set have no vectors until they're reprocessed. | Vectors come from your provider, and cosine similarity is computed in Python, which is fine for thousands of definitions | Reprocess after setting the key. Use keyword search for very large repositories |
 | **Incremental runs still download every file**, and keep unchanged files' entities as an earlier parser produced them. | Changes are found by comparing content after the download | Use a full Reprocess after upgrading CodeSage |
 
