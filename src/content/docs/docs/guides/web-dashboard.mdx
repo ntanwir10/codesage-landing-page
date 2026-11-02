@@ -190,7 +190,7 @@ Once the repository is `completed`, a **Browse definitions** card under the sear
 | Yellow `Reprocessing not started` with the server's message | 409, because a job is already running |
 | Red `Failed to start reprocessing` with the message | Any other error, such as 503 when Algolia isn't configured |
 
-A reprocess replaces the old data only after the new files are fetched, so a transient GitHub error doesn't wipe a working index. If the run fails after the old records were removed, the failure message ends with `The previous index was removed; reprocess to rebuild it.`
+A reprocess replaces the old data only after the new files are fetched, so a transient GitHub error doesn't wipe a working index. If the run fails, the repository goes back to `completed` with its previous index and counts, and its message reads `Reprocessing failed: … Search still uses the previous index.`
 
 ### Delete
 

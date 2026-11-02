@@ -287,14 +287,14 @@ curl -sS -X PUT http://127.0.0.1:8001/api/v1/repositories/7 \
   -d '{"description": "Demo service", "branch": "release"}'
 ```
 
-A new `branch` does not re-index anything. Run [`process`](#post-apiv1repositoriesrepository_idprocess) to index the new branch.
+Changing the branch of a `completed` or `failed` repository first checks that the branch exists (`422` if not), then re-indexes it from the new branch and returns it as `processing`. A `pending` repository's first run reads the new branch anyway.
 
 | Status | Cause |
 | --- | --- |
 | `200` | The updated [repository object](#repository-object) |
 | `401` | Missing or wrong key |
 | `404` | `Repository 7 not found` |
-| `409` | A run or a delete holds the repository and the request changes `branch`, `language` or `framework`. For example `Repository 7 is being processed; change branch when it finishes`. Other fields can change at any time, and sending the same value is not a change |
+| `409` | A run or a delete holds the repository and the request changes `branch`, `language` or `framework`. For example `Repository 7 is being processed; change branch when it finishes`. Other fields can change at any time, and sending the same value is not a change. A branch change also gets `Repository 7 is already being processed` if a run started while the new branch was being checked |
 | `422` | Validation. A blank name is `Value error, name cannot be empty` at `["body", "name"]`; a bad branch is `Value error, Invalid branch name` at `["body", "branch"]` |
 
 ## `DELETE /api/v1/repositories/{repository_id}`
@@ -435,7 +435,7 @@ curl -sS -X POST -H "X-API-Key: $CODESAGE_API_KEY" \
 {"message": "Processing started for repository 7", "repository_id": 7}
 ```
 
-The route sets the status to `processing` and clears `error_message` before it returns, so a client polling `/status` never reads the old `failed`. The run replaces the previous index only after the new files are fetched, so a transient GitHub error does not wipe a working index.
+For a `pending` or `failed` repository the route sets the status to `processing` and clears `error_message` before it returns, so a client polling `/status` never reads the old `failed`. A `completed` repository stays `completed` until the run starts, because a run keeps the previous index on failure only when it starts from `completed`. The run replaces the previous index only after the new files are fetched, so a transient GitHub error does not wipe a working index.
 
 | Status | Cause |
 | --- | --- |
