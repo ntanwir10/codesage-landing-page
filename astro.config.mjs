@@ -11,7 +11,7 @@ export default defineConfig({
 		starlight({
 			title: 'CodeSage',
 			description:
-				'Index codebases into Algolia and search them from Claude Desktop over MCP, or from a live web dashboard.',
+				'Index codebases into Algolia and search them from any MCP client, such as Claude Desktop, Cursor or VS Code, or from a live web dashboard.',
 			logo: { src: './src/assets/logo.svg' },
 			favicon: '/favicon.svg',
 			components: { Hero: './src/components/Hero.astro' },

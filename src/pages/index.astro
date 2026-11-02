@@ -7,7 +7,7 @@ import searchShot from '../assets/screenshots/repository-search.png';
 const tools = [
 	['list_repositories', 'Every indexed repository with status, size and any error.', 'No arguments'],
 	['search_code', 'Ranked matches over functions, classes, imports, doc sections and Terraform blocks, each with a link to the exact lines.', 'Up to 50 per page'],
-	['get_file', 'A file with line numbers, so Claude can read the code around a hit.', '400 lines, 100,000 chars per call'],
+	['get_file', 'A file with line numbers, so the assistant can read the code around a hit.', '400 lines, 100,000 chars per call'],
 	['list_definitions', 'Definitions by file and line, filtered by path prefix, type or name.', 'Up to 500'],
 	['analyze_repository', 'File, line and entity counts, languages, top directories and largest files.', 'Counts only'],
 	['find_patterns', 'Literal or regex line matches across the repository.', 'Regex stops at 10 s'],
@@ -55,9 +55,9 @@ make install-claude   # add CodeSage to Claude Desktop, then restart it`;
 
 <StarlightPage
 	frontmatter={{
-		title: 'CodeSage: search your codebase from Claude',
+		title: 'CodeSage: search your codebase from any AI assistant',
 		description:
-			'CodeSage indexes a repository into Algolia and serves it to Claude Desktop as eight MCP tools, with a live web dashboard. Self-hosted and open source.',
+			'CodeSage indexes a repository into Algolia and serves it to any MCP client (Claude Desktop, Cursor, VS Code and others) as eight tools, with a live web dashboard. Self-hosted and open source.',
 		template: 'splash',
 		hero: { title: 'CodeSage' },
 		tableOfContents: false,
@@ -68,10 +68,10 @@ make install-claude   # add CodeSage to Claude Desktop, then restart it`;
 >
 	<section class="cs-section not-content" aria-labelledby="what">
 		<p class="cs-kicker">What it does</p>
-		<h2 id="what">Your repository, as something Claude can query</h2>
+		<h2 id="what">Your repository, as something your AI assistant can query</h2>
 		<p class="cs-intro">
-			Claude can't open your repository on its own. CodeSage indexes the repository ahead of time and
-			answers Claude's questions from that index, so Claude cites real files and line numbers instead
+			An AI assistant can't open your repository on its own. CodeSage indexes the repository ahead of time
+			and answers the assistant's questions from that index, so it cites real files and line numbers instead
 			of guessing.
 		</p>
 		<div class="cs-three">
@@ -79,7 +79,7 @@ make install-claude   # add CodeSage to Claude Desktop, then restart it`;
 				<h3><span>01</span>Index</h3>
 				<p>
 					Add a repository from GitHub, GitLab, Bitbucket or a self-hosted server, in the dashboard or by
-					asking Claude. A background job fetches, parses and indexes it while the dashboard shows
+					asking your assistant. A background job fetches, parses and indexes it while the dashboard shows
 					progress after every batch.
 				</p>
 			</div>
@@ -94,7 +94,7 @@ make install-claude   # add CodeSage to Claude Desktop, then restart it`;
 			<div>
 				<h3><span>03</span>Read</h3>
 				<p>
-					Claude reads files with line numbers, lists definitions, gets language and directory
+					Your assistant reads files with line numbers, lists definitions, gets language and directory
 					breakdowns, and runs literal or regex searches, all from the copy of your code that CodeSage
 					keeps in SQLite.
 				</p>
@@ -134,10 +134,10 @@ make install-claude   # add CodeSage to Claude Desktop, then restart it`;
 	</section>
 
 	<section class="cs-section not-content" aria-labelledby="tools">
-		<p class="cs-kicker">For Claude</p>
+		<p class="cs-kicker">For any MCP client</p>
 		<h2 id="tools">Eight MCP tools</h2>
 		<p class="cs-intro">
-			Claude Desktop starts a small stdio bridge that turns each tool call into an HTTP request to the
+			Your MCP client starts a small stdio bridge that turns each tool call into an HTTP request to the
 			backend. The bridge answers <code>tools/list</code> itself, so the tools show up even while the
 			backend is down.
 		</p>
@@ -161,15 +161,16 @@ make install-claude   # add CodeSage to Claude Desktop, then restart it`;
 	<section class="cs-section cs-split not-content" aria-labelledby="ways">
 		<div>
 			<p class="cs-kicker">Two ways in</p>
-			<h2 id="ways">A dashboard for people, an MCP server for Claude</h2>
+			<h2 id="ways">A dashboard for people, an MCP server for your AI tools</h2>
 			<p>
 				The React dashboard adds repositories from GitHub, GitLab, Bitbucket or any git host, follows indexing
 				over a WebSocket (and polls every 3 seconds as a fallback), searches with suggestions and opens each
 				result at its source line.
 			</p>
 			<p>
-				Claude Desktop reaches the same backend through the MCP bridge. One command merges CodeSage into
-				your Claude Desktop config, backs up the old file and keeps the key out of sight.
+				MCP clients reach the same backend through the stdio bridge: Claude Desktop, Cursor, VS Code, Windsurf,
+				Zed and others. For Claude Desktop, one command merges CodeSage into its config, backs up the old
+				file and keeps the key out of sight; other clients take the same <code>command</code> and <code>env</code> entry.
 			</p>
 			<Code lang="bash" wrap code={`make install-claude                 # merge CodeSage into the Claude Desktop config
 make install-claude ARGS=--dry-run  # preview first, with the key masked`} />
@@ -226,7 +227,7 @@ make install-claude ARGS=--dry-run  # preview first, with the key masked`} />
 		<div class="cs-code-wrap">
 			<Code lang="bash" title="Terminal" wrap code={quickstart} />
 			<p class="cs-note">
-				Then open <code>http://localhost:5173</code>, enter <code>owner/repo</code>, and ask Claude:
+				Then open <code>http://localhost:5173</code>, enter <code>owner/repo</code>, and ask your assistant:
 				<em>"Search the zustand repository for where the store is created."</em>
 			</p>
 		</div>
