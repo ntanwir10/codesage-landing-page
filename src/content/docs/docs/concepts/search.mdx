@@ -153,7 +153,7 @@ Every `search_code` query sends these parameters:
 | `ignorePlurals` | `true` | `parsers` matches `parser` |
 | `queryLanguages` | `["en"]` | The stop-word and plural rules are English |
 
-These five exist for one reason: Claude often sends a question in plain words, such as "where is the store created". A strict full-text match would return nothing for that. With `allOptional`, the query degrades gracefully into a keyword search.
+These five exist for one reason: An AI assistant often sends a question in plain words, such as "where is the store created". A strict full-text match would return nothing for that. With `allOptional`, the query degrades gracefully into a keyword search.
 
 The query itself is at most 512 bytes of UTF-8, because Algolia rejects longer ones. A longer query is refused as invalid arguments (`query is too long; the limit is 512 bytes`) before Algolia is asked. The dashboard's search box stops at 170 characters, which always fits.
 
@@ -248,7 +248,7 @@ If you need two databases, give each its own index name.
 
 ## Failure behaviour
 
-| Situation | What Claude or the dashboard gets |
+| Situation | What the assistant or the dashboard gets |
 | --- | --- |
 | Algolia credentials missing | "Search is not configured on the server (ALGOLIA_APP_ID / ALGOLIA_ADMIN_API_KEY are missing)." |
 | Any Algolia error during `search_code` | "Search is unavailable; try again later." The real error goes to the backend log, because the client's text can name the Algolia host or app ID |

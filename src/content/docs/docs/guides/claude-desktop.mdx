@@ -10,7 +10,7 @@ Claude Desktop, Cursor, VS Code, Windsurf and other MCP clients talk to CodeSage
 
 <Mermaid caption="One tool call, end to end." code={`sequenceDiagram
     actor You
-    participant Claude as Claude Desktop
+    participant Claude as MCP client
     participant Bridge as MCP bridge
     participant API as Backend
     participant Data as Algolia or SQLite
@@ -26,7 +26,7 @@ Claude Desktop, Cursor, VS Code, Windsurf and other MCP clients talk to CodeSage
 
 Two facts shape everything below:
 
-- **Schemas live in the bridge.** `tools/list` is answered from `backend/codesage_mcp/schemas.py`, so Claude sees the eight tools even when the backend is down. Only tool calls and resource reads need the backend.
+- **Schemas live in the bridge.** `tools/list` is answered from `backend/codesage_mcp/schemas.py`, so the client sees the eight tools even when the backend is down. Only tool calls and resource reads need the backend.
 - **Arguments are checked twice.** The bridge validates them first, then the backend does again. Unknown arguments are rejected in both places, so a typo can't silently widen a query.
 
 ## Before you start
@@ -176,11 +176,11 @@ Cursor and Windsurf take the same entry in their own files (see [Config file loc
 `mcp_launcher.sh` does four things before it hands over to the bridge:
 
 1. **Finds Python.** If `.venv/bin/python` is missing it prints `` CodeSage: <path> not found. Run `make setup` in <repo> to create the virtualenv. `` to stderr and exits. If `codesage_mcp` or `mcp` can't be imported it prints `` CodeSage: the Python dependencies are missing in <repo>/.venv. Run `make setup` in <repo>. `` and exits.
-2. **Fills in a local key.** If `CODESAGE_API_KEY` is empty, `CODESAGE_BASIC_AUTH_USER` is not set, and `MCP_SERVER_URL` is a loopback `http://` URL (unset, or `http://127.0.0.1`, `http://localhost` or `http://[::1]`, with or without a port or path), it reads `CODESAGE_API_KEY` from `backend/.env` with the installer's own parser. A regenerated key in `backend/.env` then can't leave Claude behind. A key in the config always wins, and a remote `MCP_SERVER_URL` never gets the local key.
+2. **Fills in a local key.** If `CODESAGE_API_KEY` is empty, `CODESAGE_BASIC_AUTH_USER` is not set, and `MCP_SERVER_URL` is a loopback `http://` URL (unset, or `http://127.0.0.1`, `http://localhost` or `http://[::1]`, with or without a port or path), it reads `CODESAGE_API_KEY` from `backend/.env` with the installer's own parser. A regenerated key in `backend/.env` then can't leave the client behind. A key in the config always wins, and a remote `MCP_SERVER_URL` never gets the local key.
 3. **Looks up the basic-auth password.** If `CODESAGE_BASIC_AUTH_USER` is set, `CODESAGE_BASIC_AUTH_PASSWORD` is not, and `security` exists, it reads the password from the Keychain with `security find-generic-password -s codesage-mcp -a <user> -w`. A missing entry gives an empty password and `CodeSage: no Keychain password found for <user> (service codesage-mcp); continuing with an empty password.` on stderr.
 4. **Starts the bridge.** `cd backend && exec .venv/bin/python -m codesage_mcp`.
 
-Configuration comes only from the environment, which Claude Desktop fills from the `env` block. The bridge does not read `backend/.env` itself; only the launcher's key fallback in step 2 does.
+Configuration comes only from the environment, which the client fills from the `env` block. The bridge does not read `backend/.env` itself; only the launcher's key fallback in step 2 does.
 
 ## Bridge settings
 
@@ -218,7 +218,7 @@ In the prod Docker stack nginx asks for a login and adds the API key itself. Ins
 
 3. The config entry gets `MCP_SERVER_URL`, an empty `CODESAGE_API_KEY` and `CODESAGE_BASIC_AUTH_USER`. The password stays in the Keychain.
 
-4. Restart Claude Desktop. At each start the launcher reads the password from the Keychain.
+4. Restart the client. At each start the launcher reads the password from the Keychain.
 
 </Steps>
 
@@ -232,55 +232,55 @@ If the Keychain write fails (prompt cancelled or keychain locked) the installer 
 
 > What repositories do you have in CodeSage, and are they ready?
 
-Claude calls `list_repositories` with no arguments. It gets each repository's `id`, `name`, `url`, `branch`, `commit_sha` (the indexed commit), `status`, `total_files`, `total_entities`, `error_message` and `processed_at`, and can tell you which are still indexing or failed.
+The assistant calls `list_repositories` with no arguments. It gets each repository's `id`, `name`, `url`, `branch`, `commit_sha` (the indexed commit), `status`, `total_files`, `total_entities`, `error_message` and `processed_at`, and can tell you which are still indexing or failed.
 
 ### `search_code`
 
 > Search the zustand repository for where the store is created.
 
-Claude calls `search_code` with something like `{"query": "create store", "repository": "pmndrs/zustand", "limit": 10}`. Each hit has the entity name and type, file path, line range, language, signature, a snippet and a source link to the exact lines. Optional arguments are `language`, `entity_type` (`function`, `class`, `import`, `doc_section` or `terraform_block`), `limit` (1 to 50) and `page` (zero-based). Imports are searched only when `entity_type` is `import`. The query is at most 512 bytes. A question in plain words works.
+The assistant calls `search_code` with something like `{"query": "create store", "repository": "pmndrs/zustand", "limit": 10}`. Each hit has the entity name and type, file path, line range, language, signature, a snippet and a source link to the exact lines. Optional arguments are `language`, `entity_type` (`function`, `class`, `import`, `doc_section` or `terraform_block`), `limit` (1 to 50) and `page` (zero-based). Imports are searched only when `entity_type` is `import`. The query is at most 512 bytes. A question in plain words works.
 
 ### `get_file`
 
 > Show me lines 40 to 120 of `src/vanilla.ts` in zustand.
 
-Claude calls `get_file` with `repository`, `path`, `start_line` and `end_line`. Lines come back numbered, as `   12| code`. A call returns at most 400 lines and 100,000 characters; if a cap cut it short the result has `truncated: true` and Claude asks again from a later `start_line`. A wrong path gets up to 10 close suggestions.
+The assistant calls `get_file` with `repository`, `path`, `start_line` and `end_line`. Lines come back numbered, as `   12| code`. A call returns at most 400 lines and 100,000 characters; if a cap cut it short the result has `truncated: true` and the assistant asks again from a later `start_line`. A wrong path gets up to 10 close suggestions.
 
 ### `list_definitions`
 
 > List all the classes under `src/auth/` in my-org/api.
 
-Claude calls `list_definitions` with `path_prefix`, `entity_type` and optionally `name` (a case-insensitive substring) and `limit` (1 to 500, default 100). Results are ordered by file path and line, and `total` counts all matches.
+The assistant calls `list_definitions` with `path_prefix`, `entity_type` and optionally `name` (a case-insensitive substring) and `limit` (1 to 500, default 100). Results are ordered by file path and line, and `total` counts all matches.
 
 ### `analyze_repository`
 
 > Give me an overview of my-org/api: size, languages and the biggest files.
 
-Claude calls `analyze_repository`. It gets file, line and entity totals, `entities_by_type`, `files_by_language`, `definitions_by_language`, the 10 `top_directories` by file count and the 10 `largest_files` by line count. These are counts only; Claude does the interpreting.
+The assistant calls `analyze_repository`. It gets file, line and entity totals, `entities_by_type`, `files_by_language`, `definitions_by_language`, the 10 `top_directories` by file count and the 10 `largest_files` by line count. These are counts only; the assistant does the interpreting.
 
 ### `find_patterns`
 
 > Find every line in my-org/api that matches `TODO|FIXME`, only under `src/`.
 
-Claude calls `find_patterns` with `{"pattern": "TODO|FIXME", "regex": true, "path_glob": "src/*"}`. The pattern is 1 to 200 characters. `path_glob` is matched against the whole path, case-sensitive, and `*` also matches `/`. Regex search gives each file 1 second and the whole call 10 seconds; files over 1,000,000 characters are skipped; a call that runs out of time returns `truncated: true` and lists `skipped_files` (the first 50) with `skipped_count`. Literal search has no time limit.
+The assistant calls `find_patterns` with `{"pattern": "TODO|FIXME", "regex": true, "path_glob": "src/*"}`. The pattern is 1 to 200 characters. `path_glob` is matched against the whole path, case-sensitive, and `*` also matches `/`. Regex search gives each file 1 second and the whole call 10 seconds; files over 1,000,000 characters are skipped; a call that runs out of time returns `truncated: true` and lists `skipped_files` (the first 50) with `skipped_count`. Literal search has no time limit.
 
 ### `find_references`
 
 > In pmndrs/zustand, where is `createStore` used, and which functions call it?
 
-Claude calls `find_references` with `{"name": "createStore"}`. It gets the definitions first, then each whole-word use with `kind` (`import` or `reference`) and `in`, the function or class the use sits in. Source files come before tests and docs. `name` is one identifier without dots; `path_glob` and `max_results` (1 to 500, default 100) work as in `find_patterns`.
+The assistant calls `find_references` with `{"name": "createStore"}`. It gets the definitions first, then each whole-word use with `kind` (`import` or `reference`) and `in`, the function or class the use sits in. Source files come before tests and docs. `name` is one identifier without dots; `path_glob` and `max_results` (1 to 500, default 100) work as in `find_patterns`.
 
 ### `add_repository`
 
 > Add https://gitlab.com/group/project to CodeSage, then tell me when it's ready.
 
-Claude calls `add_repository` with the URL (and optionally `branch` and `description`). It returns `repository_id`, `name`, `status` and the message `Indexing started; check list_repositories for progress.` Claude then polls `list_repositories` and searches once the status is `completed`. This is the only tool that changes anything. See [Other git hosts](/docs/guides/other-git-hosts/).
+The assistant calls `add_repository` with the URL (and optionally `branch` and `description`). It returns `repository_id`, `name`, `status` and the message `Indexing started; check list_repositories for progress.` It then polls `list_repositories` and searches once the status is `completed`. This is the only tool that changes anything. See [Other git hosts](/docs/guides/other-git-hosts/).
 
-## How errors look in Claude
+## How errors look in your assistant
 
-A failure reaches Claude as a tool error with a message that says what to fix. Claude usually relays it to you. The common ones:
+A failure reaches the assistant as a tool error with a message that says what to fix. The assistant usually relays it to you. The common ones:
 
-| Situation | What Claude sees |
+| Situation | What the assistant sees |
 | --- | --- |
 | Backend not running (loopback) | `` CodeSage backend not reachable at http://127.0.0.1:8001; start it with `make start-backend` `` |
 | Backend not running (remote) | `CodeSage backend not reachable at <url>; check MCP_SERVER_URL and that the host is up` |
@@ -320,14 +320,14 @@ The bridge also answers `resources/list` and `resources/read`. Reading needs the
 
 The bridge also offers two prompts, ready-made requests that an MCP client can list for you to pick. They work with the backend down.
 
-- **Explain this repository** (`explain_repository`, takes `repository`). Claude runs `analyze_repository`, `list_definitions` and `get_file`, then explains what the repository does, how it is laid out and where to start reading.
-- **Where is this implemented?** (`find_implementation`, takes `feature` and an optional `repository`). Claude runs `search_code`, `list_definitions`, `find_references` and `get_file`, then answers with the files and line ranges. Leave `repository` empty to search every repository.
+- **Explain this repository** (`explain_repository`, takes `repository`). The assistant runs `analyze_repository`, `list_definitions` and `get_file`, then explains what the repository does, how it is laid out and where to start reading.
+- **Where is this implemented?** (`find_implementation`, takes `feature` and an optional `repository`). The assistant runs `search_code`, `list_definitions`, `find_references` and `get_file`, then answers with the files and line ranges. Leave `repository` empty to search every repository.
 
 Details are in the [MCP tools reference](/docs/reference/mcp-tools/#prompts).
 
 ## Where the log lives
 
-The bridge writes to stderr, and Claude Desktop keeps that as the MCP log for the server. On macOS:
+The bridge writes to stderr, and the client keeps that as its MCP log for the server (Cursor and VS Code show it in the Output panel). For Claude Desktop on macOS:
 
 ```text
 ~/Library/Logs/Claude/mcp-server-codesage.log

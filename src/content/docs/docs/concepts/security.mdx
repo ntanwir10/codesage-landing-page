@@ -126,7 +126,7 @@ Limits come from slowapi, per client address, and are held in memory. Set `ENABL
 
 Other endpoints have no limit. A request over the limit gets `429` with `{"detail": "Too many requests; try again in N seconds."}` and a `Retry-After` header.
 
-The client address is the TCP peer. Behind the prod nginx, uvicorn takes it from `X-Forwarded-For`, which nginx overwrites with the real client address. Without that overwrite, a client could pick its own address and dodge the limit. Everything behind one address (for example several Claude Desktop users on one office IP) shares one bucket.
+The client address is the TCP peer. Behind the prod nginx, uvicorn takes it from `X-Forwarded-For`, which nginx overwrites with the real client address. Without that overwrite, a client could pick its own address and dodge the limit. Everything behind one address (for example several people's MCP clients on one office IP) shares one bucket.
 
 The WebSocket has its own caps. See [Connection caps](#websocket-caps).
 
@@ -145,7 +145,7 @@ Code 1013 means "try again later", so the dashboard's reconnect backoff applies.
 
 - **Unhandled exceptions.** The client gets `500` with `{detail, request_id}` and an `X-Request-ID` header. The traceback goes to the log under that ID. The text of the exception is never sent.
 - **Recorded failures.** `failure_message` writes `error_message`, WebSocket frames, metrics and parse logs. A SQLAlchemy error becomes the fixed text "Database error while storing the repository", because its text carries SQL and file contents. Errors written for people are kept. Other errors are truncated to 500 characters.
-- **Tool errors.** A failed Algolia query reaches Claude as "Search is unavailable; try again later", and the health check says only "Algolia is unreachable". Client errors can name the Algolia host or app ID, so they stay in the log.
+- **Tool errors.** A failed Algolia query reaches the assistant as "Search is unavailable; try again later", and the health check says only "Algolia is unreachable". Client errors can name the Algolia host or app ID, so they stay in the log.
 - **The bridge.** Messages and logs show the backend URL without any `user:password@`. The start-up line records only whether a key is set, never its value.
 - **The installer.** `make install-claude ARGS=--dry-run` masks the key. `ensure_api_key.py` never prints it.
 - **Validation errors.** A `422` carries the field name and reason. The database session handler does not log the body of a rejected request.
@@ -170,7 +170,7 @@ The dashboard reads `VITE_CODESAGE_API_KEY` at build time, and Vite inlines ever
 - The dev nginx closes the connection (`444`) for any `Host` other than `localhost` or `127.0.0.1`.
 - The `Host` check applies even with a key set, so a rebinding page cannot fetch the bundle.
 
-Do not expose the dev stack to a network. If you must serve the dashboard to other people, use the prod stack, where the bundle is built without a key. To rotate a key, delete the `CODESAGE_API_KEY` line in `backend/.env`, run `make setup` and `make install-claude`, then restart Claude Desktop and the dev server.
+Do not expose the dev stack to a network. If you must serve the dashboard to other people, use the prod stack, where the bundle is built without a key. To rotate a key, delete the `CODESAGE_API_KEY` line in `backend/.env`, run `make setup` and `make install-claude` (or your client's target), then restart your MCP client and the dev server.
 
 ## The prod nginx role
 
@@ -196,7 +196,7 @@ For setup steps see [Production deployment](/docs/guides/production/).
 
 If a key, a basic-auth login or a `user:password@` in the URL would go over `http://` to a host that is not `127.0.0.1`, `localhost` or `::1`, the bridge returns an error and sends nothing. It says to use an `https://` URL, or to set `CODESAGE_ALLOW_INSECURE_AUTH=1` on a trusted network. The same rule covers resource reads.
 
-The basic-auth password lives in the macOS Keychain (service `codesage-mcp`), not in the Claude Desktop config. The launcher reads it and passes it to the bridge. If you cannot use the Keychain, setting `CODESAGE_BASIC_AUTH_PASSWORD` in the config stores it in plain text, in a file the installer keeps at mode 600. The installer also writes the Claude Desktop config and its backup at mode 600, because they can hold the API key.
+The basic-auth password lives in the macOS Keychain (service `codesage-mcp`), not in your MCP client's config. The launcher reads it and passes it to the bridge. If you cannot use the Keychain, setting `CODESAGE_BASIC_AUTH_PASSWORD` in the config stores it in plain text, in a file the installer keeps at mode 600. The installer also writes the client's config and its backup at mode 600, because they can hold the API key.
 
 ## Git sandboxing and URL validation
 

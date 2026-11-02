@@ -39,7 +39,7 @@ export default defineConfig({
 					label: 'Guides',
 					items: [
 						{ label: 'Web dashboard', slug: 'docs/guides/web-dashboard' },
-						{ label: 'Claude Desktop', slug: 'docs/guides/claude-desktop' },
+						{ label: 'MCP clients', slug: 'docs/guides/claude-desktop' },
 						{ label: 'Other git hosts', slug: 'docs/guides/other-git-hosts' },
 						{ label: 'Using the REST API', slug: 'docs/guides/rest-api' },
 						{ label: 'Docker dev stack', slug: 'docs/guides/docker' },

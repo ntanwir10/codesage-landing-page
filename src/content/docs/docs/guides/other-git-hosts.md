@@ -3,13 +3,13 @@ title: Other git hosts
 description: Add public GitLab, Bitbucket and self-hosted repositories from the dashboard, the REST API or the add_repository tool.
 ---
 
-CodeSage can index a public repository from GitLab, Bitbucket or a self-hosted git server, as well as GitHub. The dashboard's Home form, `POST /api/v1/repositories/` and Claude's `add_repository` tool all take the same URLs and run the same checks. This page covers the URLs they accept, how the backend reads the repository, the links in search results and every refusal message.
+CodeSage can index a public repository from GitLab, Bitbucket or a self-hosted git server, as well as GitHub. The dashboard's Home form, `POST /api/v1/repositories/` and the `add_repository` MCP tool all take the same URLs and run the same checks. This page covers the URLs they accept, how the backend reads the repository, the links in search results and every refusal message.
 
-In the dashboard, paste the URL (for example `https://gitlab.com/group/project`) into the Home page form. Typing `owner/repo` without a host still means GitHub. From Claude, ask something like:
+In the dashboard, paste the URL (for example `https://gitlab.com/group/project`) into the Home page form. Typing `owner/repo` without a host still means GitHub. From your AI assistant, ask something like:
 
 > Add https://gitlab.com/group/project to CodeSage.
 
-Claude calls `add_repository`, which returns `repository_id`, `name`, `status` and `Indexing started; check list_repositories for progress.` Indexing runs in the background. Ask Claude to check `list_repositories`, and search once the status is `completed`. Then try *"Search it for where requests are retried."*
+The assistant calls `add_repository`, which returns `repository_id`, `name`, `status` and `Indexing started; check list_repositories for progress.` Indexing runs in the background. Ask it to check `list_repositories`, and search once the status is `completed`. Then try *"Search it for where requests are retried."*
 
 ## Accepted URL forms
 
@@ -155,4 +155,4 @@ Fix the cause and reprocess from the repository page.
 - **Tool limits.** `add_repository` needs the API key like every tool call and counts toward the 30 per minute limit.
 - **Clone size.** A shallow clone of a huge repository must finish in 120 seconds and fit the 1000-file and 100 MB selection.
 
-See also [MCP tools](/docs/reference/mcp-tools/), [Claude Desktop](/docs/guides/claude-desktop/) and [Troubleshooting](/docs/troubleshooting/).
+See also [MCP tools](/docs/reference/mcp-tools/), [MCP clients](/docs/guides/claude-desktop/) and [Troubleshooting](/docs/troubleshooting/).

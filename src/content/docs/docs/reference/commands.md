@@ -1,6 +1,6 @@
 ---
 title: Commands reference
-description: Every Makefile target, the Claude Desktop installer options, npm scripts, backend test and lint commands, and useful curl one-liners.
+description: Every Makefile target, the MCP client installer options, npm scripts, backend test and lint commands, and useful curl one-liners.
 ---
 
 Run every command from the repository root unless a block says otherwise. `make help` prints the target list. The recipes below come from the [Makefile](https://github.com/ntanwir10/codesage-algolia-challenge/blob/master/Makefile). Settings that the commands read are in [Configuration](/docs/reference/configuration/).
@@ -84,34 +84,39 @@ All of these use the dev Compose file except the two `prod-` targets. See [Docke
 
 `db-reset`, `db-migrate` and `db-migration` act on the local file `backend/codesage.db`, not on the Docker volume.
 
-### Claude Desktop
+### MCP clients
 
 | Target | What it runs | Use it when | Side effects |
 | --- | --- | --- | --- |
 | `make install-claude` | `.venv/bin/python scripts/ensure_api_key.py`, then `.venv/bin/python scripts/install_claude_desktop.py $(ARGS)` | Connecting Claude Desktop, or changing its settings | Merges one entry into the Claude Desktop config, after a backup. Restart Claude Desktop afterwards |
+| `make install-cursor`, `make install-vscode`, `make install-windsurf` | The same, with `--client cursor`, `vscode` or `windsurf` | Connecting Cursor, VS Code or Windsurf | Merges one entry into that client's config, after a backup. Restart the client afterwards |
 
 Pass installer options through `ARGS`: `make install-claude ARGS="--dry-run"`. See the next section for every option.
 
-## Claude Desktop installer
+## MCP client installer
 
-`scripts/install_claude_desktop.py` uses only the Python standard library. It merges `mcpServers.<name>` into the Claude Desktop config, keeps every other key and server, writes a backup first and writes the new file atomically with mode 600.
+`scripts/install_claude_desktop.py` uses only the Python standard library. It merges one entry, `<servers key>.<name>`, into the client's config, keeps every other key and server, writes a backup first and writes the new file atomically with mode 600. Only Claude Desktop has been tested end to end; for the other clients it writes the format their documentation describes.
 
 | Option | Default | Effect |
 | --- | --- | --- |
-| `--config PATH` | Per-OS path, below | The config file to merge into |
-| `--name NAME` | `codesage` | The key under `mcpServers`. A second name gives a second server entry |
+| `--client NAME` | `claude` | `claude` (Claude Desktop), `cursor`, `vscode` or `windsurf`. Picks the default config path and the servers key |
+| `--config PATH` | Per client and OS, below | The config file to merge into |
+| `--name NAME` | `codesage` | The server's name in the config. A second name gives a second server entry |
 | `--server-url URL` | `$MCP_SERVER_URL`, else `http://127.0.0.1:8001` | Backend base URL. Must be `http(s)` with a host. A URL that contains a password is refused |
 | `--api-key KEY` | `CODESAGE_API_KEY` from `backend/.env` | Written into the entry's `env` block |
 | `--basic-auth USER` | unset | For the production stack. Prompts for the password and stores it in the macOS Keychain (service `codesage-mcp`). No API key is written, because nginx supplies it. Needs the `security` command, so macOS only |
-| `--dry-run` | off | Prints the merged config with the key shown as `********`, and writes nothing |
+| `--dry-run` | off | Prints only the CodeSage entry, with the key shown as `********`, and writes nothing |
 
-| OS | Default config path |
-| --- | --- |
-| macOS | `~/Library/Application Support/Claude/claude_desktop_config.json` |
-| Windows | `%APPDATA%\Claude\claude_desktop_config.json` |
-| Linux | `~/.config/Claude/claude_desktop_config.json` |
+| Client | Servers key | macOS | Windows | Linux |
+| --- | --- | --- | --- | --- |
+| Claude Desktop | `mcpServers` | `~/Library/Application Support/Claude/claude_desktop_config.json` | `%APPDATA%\Claude\claude_desktop_config.json` | `~/.config/Claude/claude_desktop_config.json` |
+| Cursor | `mcpServers` | `~/.cursor/mcp.json` | `%USERPROFILE%\.cursor\mcp.json` | `~/.cursor/mcp.json` |
+| VS Code (user profile) | `servers`, with `"type": "stdio"` | `~/Library/Application Support/Code/User/mcp.json` | `%APPDATA%\Code\User\mcp.json` | `~/.config/Code/User/mcp.json` |
+| Windsurf | `mcpServers` | `~/.codeium/windsurf/mcp_config.json` | `%USERPROFILE%\.codeium\windsurf\mcp_config.json` | `~/.codeium/windsurf/mcp_config.json` |
 
-The entry it writes:
+`%APPDATA%` falls back to `~\AppData\Roaming`.
+
+The entry it writes for Claude Desktop (VS Code gets the same entry under `servers`, with `"type": "stdio"`):
 
 ```json title="claude_desktop_config.json"
 {
@@ -129,15 +134,16 @@ The entry it writes:
 
 What the installer does and refuses:
 
-- It copies an existing config to `claude_desktop_config.json.bak-<YYYYMMDD-HHMMSS>-<pid>` (with `-1`, `-2` if the name exists) before it writes.
+- It copies an existing config to `<config file>.bak-<YYYYMMDD-HHMMSS>-<pid>` (with `-1`, `-2` if the name exists) before it writes.
 - It refuses a config that is not valid JSON or not a JSON object, and changes nothing.
-- It refuses a config whose `mcpServers` is not an object.
+- It refuses a config whose servers key (`mcpServers`, or `servers` for VS Code) is not an object.
 - It checks that the folder is writable before it touches the Keychain, so a failed run leaves no stray item.
 - It warns, and creates the folder, when the default config folder does not exist. It does not warn when you pass `--config`.
 - With no key found and no `--basic-auth`, it warns and writes an empty `CODESAGE_API_KEY`.
 
 ```bash title="Examples"
 make install-claude ARGS="--dry-run"
+make install-vscode ARGS="--dry-run"
 make install-claude ARGS="--name codesage-dev --api-key your-api-key"
 make install-claude ARGS="--server-url https://your-host --basic-auth alice"
 python scripts/install_claude_desktop.py --config ./test-config.json --dry-run

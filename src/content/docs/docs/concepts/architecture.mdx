@@ -6,15 +6,15 @@ description: How the CodeSage backend, bridge, dashboard and proxies fit togethe
 import { Aside, Badge, FileTree } from '@astrojs/starlight/components';
 import Mermaid from '~/components/Mermaid.astro';
 
-CodeSage is a self-hosted tool. There is no hosted demo: you run the backend on your own machine or server, with your own Algolia account. Everything that does work runs inside one FastAPI process. The other parts are clients (the dashboard, the Claude Desktop bridge) or proxies (nginx) that talk to that process.
+CodeSage is a self-hosted tool. There is no hosted demo: you run the backend on your own machine or server, with your own Algolia account. Everything that does work runs inside one FastAPI process. The other parts are clients (the dashboard, the MCP bridge) or proxies (nginx) that talk to that process.
 
-This page explains what each part is, why it was built that way, and what happens in order when the server starts, when a request arrives and when Claude calls a tool. For the numbers behind indexing, read [the indexing pipeline](/docs/concepts/indexing-pipeline/). For the index itself, read [search](/docs/concepts/search/).
+This page explains what each part is, why it was built that way, and what happens in order when the server starts, when a request arrives and when an MCP client calls a tool. For the numbers behind indexing, read [the indexing pipeline](/docs/concepts/indexing-pipeline/). For the index itself, read [search](/docs/concepts/search/).
 
 ## The big picture
 
 <Mermaid caption="The whole system. In development there is no nginx: the dashboard and the bridge call the backend directly." code={`flowchart TB
     you(["You"]) --> browser["Web dashboard<br/>React + Vite"]
-    you --> claude["Claude Desktop"]
+    you --> claude["MCP client<br/>Claude Desktop, Cursor, VS Code, ..."]
     claude -- "tools/call over stdio" --> bridge["MCP bridge"]
     browser -- "REST and WebSocket" --> nginx["nginx, prod only<br/>HTTPS, login, adds the API key"]
     bridge -- "HTTP with the API key" --> nginx
@@ -38,14 +38,14 @@ The split of work follows one rule: Algolia answers questions about meaning (whi
 | Core | [`backend/app/core/`](https://github.com/ntanwir10/codesage-algolia-challenge/tree/master/backend/app/core) | `config.py` (settings and start-up validation), `security.py` (API key, request guard, rate limiter, failure messages), `database.py` (engine and session) and `migrations.py` (Alembic at start-up). |
 | Models | [`backend/app/models/`](https://github.com/ntanwir10/codesage-algolia-challenge/tree/master/backend/app/models) | SQLAlchemy tables `Repository`, `CodeFile` and `CodeEntity`. See [the data model](/docs/concepts/data-model/). |
 | Services | [`backend/app/services/`](https://github.com/ntanwir10/codesage-algolia-challenge/tree/master/backend/app/services) | `repository_service.py` (job lifecycle), `github_service.py` (listing and download), `git_source.py` (public repositories on other hosts, read with git), `code_parser.py` (entities), `algolia_service.py` (index and search), `mcp_tools.py` (the eight tools) and `websocket_service.py` (live status). |
-| MCP bridge | [`backend/codesage_mcp/`](https://github.com/ntanwir10/codesage-algolia-challenge/tree/master/backend/codesage_mcp) | The stdio MCP server that Claude Desktop runs. It holds no data. It turns `tools/call`, `resources/list` and `resources/read` into HTTP calls to `/api/v1/ai`, and answers `tools/list`, `resources/templates/list` and its two prompts itself. |
+| MCP bridge | [`backend/codesage_mcp/`](https://github.com/ntanwir10/codesage-algolia-challenge/tree/master/backend/codesage_mcp) | The stdio MCP server that your MCP client runs. It holds no data. It turns `tools/call`, `resources/list` and `resources/read` into HTTP calls to `/api/v1/ai`, and answers `tools/list`, `resources/templates/list` and its two prompts itself. |
 | Dashboard | [`frontend/`](https://github.com/ntanwir10/codesage-algolia-challenge/tree/master/frontend) | React and Vite. `services/api.ts` and `services/websocket.ts` are the REST and WebSocket clients. |
 | nginx | [`deployment/nginx.conf`](https://github.com/ntanwir10/codesage-algolia-challenge/blob/master/deployment/nginx.conf), [`deployment/nginx.prod.conf.template`](https://github.com/ntanwir10/codesage-algolia-challenge/blob/master/deployment/nginx.prod.conf.template) | Dev: a plain HTTP proxy that drops requests for any `Host` except `localhost` and `127.0.0.1`. Prod: TLS, basic auth and API-key injection. See [Production deployment](/docs/guides/production/). |
-| Launcher | [`mcp_launcher.sh`](https://github.com/ntanwir10/codesage-algolia-challenge/blob/master/mcp_launcher.sh) | What Claude Desktop starts. It checks `.venv/bin/python`, reads a basic-auth password from the macOS Keychain if needed, then runs `python -m codesage_mcp` from `backend/`. |
+| Launcher | [`mcp_launcher.sh`](https://github.com/ntanwir10/codesage-algolia-challenge/blob/master/mcp_launcher.sh) | What your MCP client starts. It checks `.venv/bin/python`, reads a basic-auth password from the macOS Keychain if needed, then runs `python -m codesage_mcp` from `backend/`. |
 
 ### Why the bridge is a separate process
 
-Claude Desktop starts MCP servers as child processes and talks to them over stdin and stdout. The bridge is that child. It does not import the backend, open the database or hold an Algolia key. Two benefits follow:
+An MCP client such as Claude Desktop, Cursor or VS Code starts stdio MCP servers as child processes and talks to them over stdin and stdout. The bridge is that child. It does not import the backend, open the database or hold an Algolia key. Two benefits follow:
 
 - **The backend can run anywhere.** The bridge only needs a URL (`MCP_SERVER_URL`), so the backend can live on another machine behind nginx.
 - **`tools/list` works with the backend down.** Tool names and argument models live in [`backend/codesage_mcp/schemas.py`](https://github.com/ntanwir10/codesage-algolia-challenge/blob/master/backend/codesage_mcp/schemas.py), which the backend imports too. That file may not import app, database, Algolia or settings code, so it loads anywhere. Only tool calls and resource reads need the backend.
@@ -57,9 +57,9 @@ The bridge validates arguments first (unknown arguments are rejected), then the 
 There are two ways in, and both end at the same FastAPI backend.
 
 - **Web dashboard.** You add a repository from GitHub or another git host, watch it index over a WebSocket (with 3-second polling as a fallback), and search it. The dashboard, `POST /api/v1/repositories/` and the `add_repository` tool take the same URLs.
-- **Claude Desktop.** Claude calls the eight tools through the bridge. Claude can also add public repositories from GitLab, Bitbucket and other git hosts with the `add_repository` tool.
+- **MCP clients.** Claude Desktop, Cursor, VS Code, Windsurf and other clients call the eight tools through the bridge. Your assistant can also add public repositories from GitLab, Bitbucket and other git hosts with the `add_repository` tool.
 
-Both entry points reach the same indexing service, so a repository added from Claude shows up in the dashboard and the other way round.
+Both entry points reach the same indexing service, so a repository added from your assistant shows up in the dashboard and the other way round.
 
 ## Inside the backend
 
@@ -92,9 +92,9 @@ The catch-all `500` handler is different. It sits in Starlette's outermost error
 
 ## One tool call, step by step
 
-<Mermaid caption="A tool call from Claude to an answer. The key, origin and rate limit are checked before any data is touched." code={`sequenceDiagram
+<Mermaid caption="A tool call from your assistant to an answer. The key, origin and rate limit are checked before any data is touched." code={`sequenceDiagram
     actor You
-    participant Claude as Claude Desktop
+    participant Claude as MCP client
     participant Bridge as MCP bridge
     participant API as Backend
     participant Data as Algolia or SQLite
@@ -112,7 +112,7 @@ The catch-all `500` handler is different. It sits in Starlette's outermost error
 - **Bridge.** It checks the arguments with the same models the backend uses, refuses to send the key over plain `http://` to a remote host, and posts `{tool_name, arguments}` to `/api/v1/ai/mcp/tools/call`.
 - **nginx (prod).** The request goes through nginx, which checks your login and adds the API key. The bridge sends a basic-auth login instead of a key in this case.
 - **Backend.** The guard checks the `Host`. The route checks the key and the 30-per-minute limit. `search_code` queries Algolia. The other tools read SQLite. Every tool except `list_repositories` and `add_repository` refuses a repository that is not `completed`, and says why or how far along it is.
-- **Errors.** A tool failure such as an unknown repository comes back as HTTP `200` with `is_error: true`, so Claude sees the message. A rejected key (`401`), a refused host (`403`), a wrong URL (`404`), bad arguments (`422`), a rate limit (`429`), a backend error (`5xx`), a timeout or an unreachable backend all become a tool error that says what to fix. The full table is in [MCP endpoints and errors](/docs/reference/mcp-endpoints/).
+- **Errors.** A tool failure such as an unknown repository comes back as HTTP `200` with `is_error: true`, so the assistant sees the message. A rejected key (`401`), a refused host (`403`), a wrong URL (`404`), bad arguments (`422`), a rate limit (`429`), a backend error (`5xx`), a timeout or an unreachable backend all become a tool error that says what to fix. The full table is in [MCP endpoints and errors](/docs/reference/mcp-endpoints/).
 
 ## The request path: dev versus prod
 

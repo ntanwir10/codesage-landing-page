@@ -1,6 +1,6 @@
 ---
 title: MCP HTTP endpoints
-description: The /api/v1/ai endpoints behind the MCP bridge, with auth, rate limits, request and response examples, and how every failure reaches Claude.
+description: The /api/v1/ai endpoints behind the MCP bridge, with auth, rate limits, request and response examples, and how every failure reaches your assistant.
 ---
 
 The stdio bridge turns each MCP request into an HTTP call under `/api/v1/ai`. You can call the same endpoints directly with `curl`, which is the quickest way to debug a tool. The examples use `http://127.0.0.1:8001`, the default for a local install. For the tools themselves, see [MCP tools](/docs/reference/mcp-tools/).
@@ -268,7 +268,7 @@ With `mode=semantic` it embeds the query with the server's provider instead and 
 | `422` | `query` is missing, `limit` is outside 1 to 20, or `mode` is not `keyword` or `semantic` |
 | `429` | Rate limit reached |
 
-## How failures reach Claude
+## How failures reach your assistant
 
 The bridge maps every backend result to a tool error message that says what to fix. Resource reads fail as MCP protocol errors instead, with the same wording.
 
@@ -297,7 +297,7 @@ For resource reads, a `404` with a JSON body reads `Resource or repository not f
 
 ## Bridge request behavior
 
-The bridge is configured only by environment variables. Claude Desktop fills them from the `env` block of its config. The full list is in [Configuration](/docs/reference/configuration/#bridge-environment).
+The bridge is configured only by environment variables. Your MCP client fills them from the `env` block of its config. The full list is in [Configuration](/docs/reference/configuration/#bridge-environment).
 
 | Behavior | Detail |
 | --- | --- |
@@ -319,5 +319,5 @@ The bridge refuses plain `http://` to a remote host before it sends anything. If
 ## Related pages
 
 - [REST API](/docs/reference/rest-api/) for the repository endpoints and the shared error shapes.
-- [Claude Desktop](/docs/guides/claude-desktop/) to install the bridge.
+- [MCP clients](/docs/guides/claude-desktop/) to install the bridge.
 - [Troubleshooting](/docs/troubleshooting/) for a symptom-first view of these errors.

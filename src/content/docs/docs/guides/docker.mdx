@@ -14,7 +14,7 @@ If you want HTTPS, a login and a bundle without a key, use [Production deploymen
     you(["Your browser"]) --> nginx["codesage_nginx<br/>127.0.0.1:80, plain HTTP"]
     nginx -- "static files" --> spa["Built dashboard<br/>API key inside the bundle"]
     nginx -- "/api, /ws, /health" --> backend["codesage_mcp_server<br/>127.0.0.1:8001<br/>uvicorn --reload, one worker"]
-    bridge(["Claude Desktop bridge"]) --> backend
+    bridge(["MCP bridge<br/>started by your MCP client"]) --> backend
     backend --> vol[("backend_data volume<br/>/app/data/codesage.db")]
     backend --> algolia[("Algolia<br/>codesage_code_entities_docker")]
     other(["Any other Host header"]) -. "closed with 444" .-> nginx
@@ -68,7 +68,7 @@ If you want HTTPS, a login and a bundle without a key, use [Production deploymen
 
 </Steps>
 
-To connect Claude Desktop to this stack, run `make install-claude`. It points the bridge at `http://127.0.0.1:8001`, which the stack publishes. See [Claude Desktop](/docs/guides/claude-desktop/).
+To connect an MCP client to this stack, run `make install-claude` (or `install-cursor`, `install-vscode`, `install-windsurf`). It points the bridge at `http://127.0.0.1:8001`, which the stack publishes. See [MCP clients](/docs/guides/claude-desktop/).
 
 ## What each container does
 

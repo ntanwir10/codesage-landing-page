@@ -35,7 +35,7 @@ CodeSage stores one record per code entity in an Algolia index. You need an Algo
 4. Copy the **Admin API Key** into `ALGOLIA_ADMIN_API_KEY`.
 
 <Aside type="caution">
-The backend needs the **Admin** API key, not the search-only key. It writes records, changes the index settings, deletes records by filter and lists indexes for the health check. The backend also runs every search with this key. Keep it in `backend/.env`. Never put it in `frontend/.env`, the Claude Desktop config or a screenshot.
+The backend needs the **Admin** API key, not the search-only key. It writes records, changes the index settings, deletes records by filter and lists indexes for the health check. The backend also runs every search with this key. Keep it in `backend/.env`. Never put it in `frontend/.env`, your MCP client's config or a screenshot.
 </Aside>
 
 You don't create the index yourself. The first indexing run creates it (named by `ALGOLIA_INDEX_NAME`, default `codesage_code_entities`) and applies the settings. Records are keyed by repository ID, so two CodeSage databases must not share one index; the Docker stacks use their own index names for that reason. What you spend is governed by your own Algolia plan.
@@ -74,7 +74,7 @@ The target runs these steps in order. It prints a header line first, and each st
 4. **Check Node.** Fails with `Node.js 22 or newer is required` below 22.
 5. **Install frontend packages.** `cd frontend && npm ci`, which installs exactly what `package-lock.json` lists.
 6. **Ensure the API key.** `.venv/bin/python scripts/ensure_api_key.py`, described next.
-7. **Print the next steps.** The values to edit in `backend/.env`, and `Next: 'make start', then 'make install-claude' for Claude Desktop`.
+7. **Print the next steps.** The values to edit in `backend/.env`, and `Next: 'make start', then 'make install-claude' (or install-cursor, install-vscode, install-windsurf)`.
 
 </Steps>
 
@@ -82,13 +82,13 @@ Running `make setup` again is safe. It skips the files that exist and only re-in
 
 ### The API key
 
-`CODESAGE_API_KEY` protects the write endpoints, the MCP tool endpoints and the WebSocket. You never have to invent it. `scripts/ensure_api_key.py` runs from `make setup`, `make start` and `make install-claude`, and does this:
+`CODESAGE_API_KEY` protects the write endpoints, the MCP tool endpoints and the WebSocket. You never have to invent it. `scripts/ensure_api_key.py` runs from `make setup`, `make start` and every `make install-*` target, and does this:
 
 1. Stops with `error: backend/.env not found; run 'make setup' first` if `backend/.env` is missing (exit code 1).
 2. Reads `CODESAGE_API_KEY` from `backend/.env`. If it is missing or empty, it generates one with Python's `secrets.token_urlsafe(32)`, removes the empty line and appends `CODESAGE_API_KEY=<key>`. It prints `Generated a CodeSage API key in backend/.env`. A non-empty key is **never changed**.
 3. Compares `VITE_CODESAGE_API_KEY` in `frontend/.env` with the key. If they differ, or `frontend/.env` doesn't exist, it removes every `VITE_CODESAGE_API_KEY` line there and appends the current key. It prints `Copied it to frontend/.env (restart Vite to pick it up)`.
 4. Sets both files to mode 600 if they were not.
-5. If it generated a key, prints `Run 'make install-claude' and restart Claude Desktop so Claude uses it.`
+5. If it generated a key, prints `Run 'make install-claude' (or install-cursor, install-vscode, install-windsurf) and restart the client so it uses it.`
 
 The script never prints the key. Writes are atomic: it writes a temporary file in the same folder, sets mode 600 and renames it over the target.
 
@@ -104,8 +104,8 @@ The dashboard sends the key as an `X-API-Key` header. Vite inlines every `VITE_*
 
 1. Delete the `CODESAGE_API_KEY` line in `backend/.env`.
 2. Run `make setup`. It generates a new key and updates `frontend/.env`.
-3. Run `make install-claude`. It rewrites the CodeSage entry in the Claude Desktop config (and writes a new backup).
-4. Restart the backend, Vite and Claude Desktop. The backend reads `backend/.env` only at startup.
+3. Run `make install-claude` (or your client's target). It rewrites the CodeSage entry in the client's config (and writes a new backup).
+4. Restart the backend, Vite and your MCP client. The backend reads `backend/.env` only at startup.
 
 ## Ports
 
@@ -170,12 +170,12 @@ Outside the repository:
 
 | File | Created by | Notes |
 | --- | --- | --- |
-| Claude Desktop config (`claude_desktop_config.json`) | `make install-claude` | Merged, never replaced. Mode 600. Paths per OS are in [Claude Desktop](/docs/guides/claude-desktop/#config-file-locations). |
-| `claude_desktop_config.json.bak-<YYYYMMDD-HHMMSS>-<pid>` | `make install-claude` | A byte-for-byte backup next to the config, mode 600. A `-1`, `-2` suffix is added if the name exists. |
+| Your MCP client's config (for example `claude_desktop_config.json`) | `make install-claude` or your client's target | Merged, never replaced. Mode 600. Paths per client and OS are in [MCP clients](/docs/guides/claude-desktop/#config-file-locations). |
+| `<config file>.bak-<YYYYMMDD-HHMMSS>-<pid>` | The same target | A byte-for-byte backup next to the config, mode 600. A `-1`, `-2` suffix is added if the name exists. |
 | `codesage-clone-*` temporary folder | `add_repository` on non-GitHub hosts | A shallow clone, always removed when the run ends. |
 | Keychain item `codesage-mcp` | `--basic-auth` (macOS) | The proxy password. Only for the prod stack. |
 
-The backend logs go to the terminal as JSON lines. The bridge logs to stderr, which Claude Desktop keeps in its MCP log.
+The backend logs go to the terminal as JSON lines. The bridge logs to stderr, which your MCP client keeps in its MCP log.
 
 ## Stop and clean up
 
@@ -186,4 +186,4 @@ The backend logs go to the terminal as JSON lines. The bridge logs to stderr, wh
 <LinkCard title="Quick start" description="The five-step version of this page." href="/docs/quick-start/" />
 <LinkCard title="Configuration reference" description="Every environment variable, default and limit." href="/docs/reference/configuration/" />
 <LinkCard title="Commands reference" description="Every make target." href="/docs/reference/commands/" />
-<LinkCard title="Claude Desktop guide" description="Connect Claude after the install." href="/docs/guides/claude-desktop/" />
+<LinkCard title="MCP client guide" description="Connect your AI assistant after the install." href="/docs/guides/claude-desktop/" />

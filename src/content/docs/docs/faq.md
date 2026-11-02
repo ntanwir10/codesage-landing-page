@@ -11,7 +11,7 @@ No. CodeSage is self-hosted. You run the backend and dashboard yourself, with yo
 
 ### What does it cost?
 
-CodeSage itself has no fee in these sources. What you pay for is on your side: your Algolia plan (CodeSage writes one record per code entity and sends search requests to your index), your Claude plan, and your own machine or server. Check Algolia's current plan limits before you index a very large repository.
+CodeSage itself has no fee in these sources. What you pay for is on your side: your Algolia plan (CodeSage writes one record per code entity and sends search requests to your index), your AI assistant's plan, and your own machine or server. Check Algolia's current plan limits before you index a very large repository.
 
 ### Do I need Claude Desktop?
 
@@ -27,7 +27,7 @@ No. It reads files as text, parses them into entities and stores them. It never 
 
 ### Which operating systems work?
 
-The sources describe macOS and Linux paths for everything. The Claude Desktop installer also knows the Windows config path, but the launcher is a bash script that runs `.venv/bin/python`, and the `--basic-auth` flow needs the macOS Keychain. Treat Windows as untested.
+The sources describe macOS and Linux paths for everything. The installer also knows each client's Windows config path, but the launcher is a bash script that runs `.venv/bin/python`, and the `--basic-auth` flow needs the macOS Keychain. Treat Windows as untested.
 
 ## Requirements and credentials
 
@@ -100,7 +100,7 @@ Your code touches these places, and the backend code contacts nothing else:
 - **GitHub.** The backend downloads files from `api.github.com` and `raw.githubusercontent.com`, with your token if set. Other hosts are cloned with `git`.
 - **Algolia.** One record per entity is sent to your index. A record holds `objectID`, `repository_id`, `file_path`, `entity_type`, `entity_name`, `description`, `parameters`, `return_type`, `line_start`, `line_end`, `language`, `signature`, `content`, `rank_weight`, `is_test`, `parameter_count` and `lines_of_code`. `content` is the signature plus at most 2000 characters of the entity body, and each record is trimmed to 9000 bytes. Whole files are not sent to Algolia.
 - **Your local SQLite file.** It holds the full text of every indexed file at `backend/codesage.db`.
-- **Claude.** What a tool returns, such as snippets or numbered file lines, becomes part of your conversation with Claude.
+- **Your AI assistant.** What a tool returns, such as snippets or numbered file lines, becomes part of your conversation with the assistant.
 
 The backend makes outbound calls only to GitHub, Algolia and git remotes. It has no analytics or telemetry calls.
 
@@ -118,7 +118,7 @@ Not in the local setup. Vite inlines `VITE_CODESAGE_API_KEY` into the JavaScript
 
 The bridge is a standard stdio MCP server, so any client that can launch a command with environment variables can use it. Claude Desktop, Cursor, VS Code and Windsurf have installers (`make install-claude`, `install-cursor`, `install-vscode`, `install-windsurf`); only Claude Desktop has been tested end to end. For any other client, point it at `mcp_launcher.sh` and set `MCP_SERVER_URL` and `CODESAGE_API_KEY`. You can test the bridge with `npx @modelcontextprotocol/inspector ./mcp_launcher.sh`. See [MCP clients](/docs/guides/claude-desktop/#check-the-bridge-with-the-mcp-inspector).
 
-### Why does Claude say a repository is "still indexing" or "failed to index"?
+### Why does my assistant say a repository is "still indexing" or "failed to index"?
 
 Every tool except `list_repositories` and `add_repository` refuses a repository that isn't `completed`. A `pending` or `processing` one says `is still indexing (n/m files)`. A failed one gives the reason and says to reprocess it from the dashboard.
 
