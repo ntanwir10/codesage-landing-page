@@ -55,6 +55,8 @@ The prod backend image is a two-stage build. A builder stage installs the depend
 
    The password appears in your shell history and in the process list while this runs. Clear the history entry, or run it on a machine you trust. Add more users by appending more lines.
 
+   Use a long random password, for example from `openssl rand -base64 24`. nginx allows each address 10 requests a second, in bursts of up to 50, and answers `429` past that. The limit runs before the login, so it also slows password guessing.
+
 2. **Create the certificate.** `deployment/ssl/` must hold `cert.pem` and `key.pem`. For a self-signed pair:
 
    ```bash
@@ -124,6 +126,8 @@ With a key set, the backend answers only to loopback hosts, the hosts named in `
 - **The key.** nginx sets `X-API-Key` itself on `/api` and `/ws`, and sets `Authorization` to empty, so the backend never sees the login. Only `${CODESAGE_API_KEY}` is substituted in the template (`NGINX_ENVSUBST_FILTER`). nginx's own `$variables` are left alone.
 - **Forwarded headers, overwritten and not appended.** `X-Forwarded-For` is set to the real client address and `X-Forwarded-Proto` to `https`. The backend uses the first for per-client rate limits and WebSocket caps, so a client must not be able to choose its own address.
 - **uvicorn trust.** `Dockerfile.prod` starts uvicorn with `--forwarded-allow-ips "*"`. That is safe only because the backend has no published port and nginx is the only peer that can reach it. Keep it that way.
+- **Request limit.** nginx allows each address 10 requests a second, in bursts of up to 50, and answers `429` past that. The limit runs before the login, so it also slows password guessing.
+- **Behind a load balancer or CDN.** nginx would take every request's address from the balancer, so all users would share one rate limit and one WebSocket cap. Add `set_real_ip_from <the balancer's address range>;` and `real_ip_header X-Forwarded-For;` to the 443 server so nginx reads the client's address from the balancer's header. List only ranges you control: anyone else can set that header.
 - **Limits.** `client_max_body_size` is 2 MB. `/ws` allows idle connections for an hour. `/api/` times out after 60 s.
 - **Compression.** Text, CSS, JSON and JavaScript are gzipped.
 - **Static files.** The dashboard is served from the nginx image, with `index.html` as the fallback for any path.
