@@ -1,11 +1,11 @@
 ---
 title: Quick start
-description: Install CodeSage, run it, index a repository and connect Claude Desktop in five steps.
+description: Install CodeSage, run it, index a repository and connect your MCP client in five steps.
 ---
 
 import { Steps, Aside, LinkCard } from '@astrojs/starlight/components';
 
-This page gets you from a fresh clone to a working Claude Desktop connection. Each step names the exact command and what you should see. For the reasoning behind each step, see [Installation](/docs/installation/).
+This page gets you from a fresh clone to a working MCP client connection. Each step names the exact command and what you should see. For the reasoning behind each step, see [Installation](/docs/installation/).
 
 ## Requirements
 
@@ -13,7 +13,7 @@ This page gets you from a fresh clone to a working Claude Desktop connection. Ea
 - **Node.js 22 or newer** and npm.
 - **An Algolia application ID and Admin API key.** Without them the backend still starts, but adding a repository returns `503` and `/health` reports `degraded`.
 - **A GitHub token** (optional but recommended). Without one, GitHub's low unauthenticated rate limit applies and private repositories can't be read.
-- **Claude Desktop**, for step 5.
+- **An MCP client** for step 5: Claude Desktop, Cursor, VS Code or Windsurf have installers; any other stdio client works by hand.
 - `curl` (used by `make start` and `make health`) and `jq` (used by `make health`).
 
 You also need a clone of the repository:
@@ -40,7 +40,7 @@ cd codesage-algolia-challenge
    ```text
    Generated a CodeSage API key in backend/.env
    Copied it to frontend/.env (restart Vite to pick it up)
-   Run 'make install-claude' and restart Claude Desktop so Claude uses it.
+   Run 'make install-claude' (or install-cursor, install-vscode, install-windsurf) and restart the client so it uses it.
    ```
 
 2. **Configure.** Open `backend/.env` and fill in these three values:
@@ -65,14 +65,17 @@ cd codesage-algolia-challenge
 
 4. **Index a repository.** Open http://localhost:5173. In the **Repository** field, type `owner/repo` (for example `pmndrs/zustand`), or paste a GitHub URL or an https URL from GitLab, Bitbucket or another git host. Then press **Add Repository**. You land on the repository page, which shows progress live. When the badge turns **Completed**, the repository is searchable. If GitHub or Algolia refuses the repository, the form shows the reason under the field and stays on the Home page. All the messages are in [the dashboard guide](/docs/guides/web-dashboard/#adding-a-repository).
 
-5. **Connect Claude Desktop.**
+5. **Connect your MCP client.**
 
    ```bash
    make install-claude                 # add CodeSage to the Claude Desktop config
-   make install-claude ARGS=--dry-run  # preview first; the key is masked
+   make install-cursor                 # or Cursor
+   make install-vscode                 # or VS Code
+   make install-windsurf               # or Windsurf
+   make install-claude ARGS=--dry-run  # preview first; prints only the CodeSage entry, key masked
    ```
 
-   Expected output of the real run (the backup line appears only if a config file already existed):
+   Expected output of a real Claude Desktop run (the backup line appears only if a config file already existed; the other clients print their own path and name):
 
    ```text
    backup: /Users/<you>/Library/Application Support/Claude/claude_desktop_config.json.bak-20261026-101500-4242
@@ -80,7 +83,7 @@ cd codesage-algolia-challenge
    Restart Claude Desktop to pick it up.
    ```
 
-   Fully quit and reopen Claude Desktop, and keep the backend running. Then ask Claude something like *"Search the zustand repository for where the store is created."*
+   Fully quit and reopen the client, and keep the backend running. Then ask your assistant something like *"Search the zustand repository for where the store is created."*
 
 </Steps>
 
@@ -137,16 +140,16 @@ The Algolia result is cached for 30 seconds, so a fix may take that long to show
 
 Visit http://127.0.0.1:8001/docs for the interactive OpenAPI page. It is hidden when `ENVIRONMENT=production`.
 
-### Ask Claude a first question
+### Ask a first question
 
-In Claude Desktop, ask:
+In your MCP client, ask:
 
 > List the repositories in CodeSage.
 
-Claude should call `list_repositories` and show the repository you added, with `status: completed`. Then try a search, such as *"Search the zustand repository for where the store is created."* If Claude reports an error instead, the message says what to fix; the common ones are in [Troubleshooting](/docs/troubleshooting/).
+The assistant should call `list_repositories` and show the repository you added, with `status: completed`. Then try a search, such as *"Search the zustand repository for where the store is created."* If it reports an error instead, the message says what to fix; the common ones are in [Troubleshooting](/docs/troubleshooting/).
 
 ## Next steps
 
 <LinkCard title="Installation in depth" description="Credentials, what make setup does, ports, upgrades and the files CodeSage creates." href="/docs/installation/" />
 <LinkCard title="Web dashboard guide" description="Every page, status color and message in the dashboard." href="/docs/guides/web-dashboard/" />
-<LinkCard title="Claude Desktop guide" description="Installer options, bridge settings, example prompts and error messages." href="/docs/guides/claude-desktop/" />
+<LinkCard title="MCP client guide" description="Installers for Claude Desktop, Cursor, VS Code and Windsurf, bridge settings, example prompts and error messages." href="/docs/guides/claude-desktop/" />

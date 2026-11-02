@@ -1,12 +1,12 @@
 ---
-title: Claude Desktop
-description: Connect Claude Desktop to CodeSage with the installer or by hand, tune the bridge and see what each tool does.
+title: Claude Desktop and other MCP clients
+description: Connect Claude Desktop, Cursor, VS Code or Windsurf to CodeSage with the installer or by hand, tune the bridge and see what each tool does.
 ---
 
 import { Aside, LinkCard, Steps, TabItem, Tabs } from '@astrojs/starlight/components';
 import Mermaid from '~/components/Mermaid.astro';
 
-Claude Desktop talks to CodeSage through a small stdio program called the MCP bridge. Claude Desktop starts it, the bridge checks each tool call and forwards it to the backend over HTTP. This guide covers the installer, the manual setup, the bridge settings and how to check that everything works.
+Claude Desktop, Cursor, VS Code, Windsurf and other MCP clients talk to CodeSage through a small stdio program called the MCP bridge. The client starts it, the bridge checks each tool call and forwards it to the backend over HTTP. This guide covers the installer, the manual setup, the bridge settings and how to check that everything works.
 
 <Mermaid caption="One tool call, end to end." code={`sequenceDiagram
     actor You
@@ -39,10 +39,15 @@ Two facts shape everything below:
 
 ```bash
 make install-claude                 # merge CodeSage into the Claude Desktop config
-make install-claude ARGS=--dry-run  # print the merged config with the key masked; write nothing
+make install-cursor                 # the same for Cursor
+make install-vscode                 # the same for VS Code
+make install-windsurf               # the same for Windsurf
+make install-claude ARGS=--dry-run  # print the CodeSage entry with the key masked; write nothing
 ```
 
-`make install-claude` runs `scripts/ensure_api_key.py` and then `scripts/install_claude_desktop.py $(ARGS)`. The installer uses only the Python standard library. Restart Claude Desktop afterwards.
+`make install-claude` runs `scripts/ensure_api_key.py` and then `scripts/install_claude_desktop.py $(ARGS)`; the other targets add `--client cursor`, `vscode` or `windsurf`. The installer uses only the Python standard library. Restart the client afterwards.
+
+Only Claude Desktop has been tested end to end. The Cursor, VS Code and Windsurf installers write the format each client's documentation describes.
 
 <Aside type="note">
 Through `make`, even `--dry-run` runs `ensure_api_key.py` first, which can create the API key in `backend/.env` and `frontend/.env`. To avoid every write, call the installer directly: `.venv/bin/python scripts/install_claude_desktop.py --dry-run`.
@@ -52,12 +57,13 @@ Through `make`, even `--dry-run` runs `ensure_api_key.py` first, which can creat
 
 | Option | Default | Notes |
 | --- | --- | --- |
-| `--config PATH` | Per-OS location, see below | The Claude Desktop config file to merge into. Passing it also silences the "Claude Desktop doesn't seem to be installed" warning. |
-| `--name NAME` | `codesage` | Key under `mcpServers`. A second name gives a second entry and its own log file. |
+| `--client NAME` | `claude` | `claude` (Claude Desktop), `cursor`, `vscode` or `windsurf`. Picks the default config path and the key servers are listed under. |
+| `--config PATH` | Per client and OS, see below | The config file to merge into. Passing it also silences the "doesn't seem to be installed" warning. |
+| `--name NAME` | `codesage` | The server's name in the config. A second name gives a second entry and its own log file. |
 | `--server-url URL` | `MCP_SERVER_URL` from your shell, else `http://127.0.0.1:8001` | Backend base URL. Must be an `http` or `https` URL with a host. A URL that contains a password is refused. |
 | `--api-key KEY` | `CODESAGE_API_KEY` from `backend/.env` | Written into the entry's `env` block. |
 | `--basic-auth USER` | unset | For the prod stack behind nginx. Prompts for the password and stores it in the macOS Keychain (service `codesage-mcp`). No API key is written. |
-| `--dry-run` | off | Prints the merged config with `CODESAGE_API_KEY` shown as `********` and writes nothing. |
+| `--dry-run` | off | Prints only the CodeSage entry, with `CODESAGE_API_KEY` shown as `********`, and writes nothing. |
 
 Options go through `ARGS`:
 
@@ -74,7 +80,7 @@ make install-claude ARGS="--name codesage-dev --api-key <key>"                 #
 make install-claude ARGS=--dry-run
 ```
 
-The output starts with `# dry run: would write <config path>` and then the whole merged config, with your other servers intact:
+The output starts with `# dry run: would add mcpServers.codesage to <config path> and keep everything else in it`, then shows only the CodeSage entry. Your other servers are never printed, because their `env` blocks often hold their own tokens:
 
 ```json
 {
@@ -92,24 +98,37 @@ The output starts with `# dry run: would write <config path>` and then the whole
 
 ### Config file locations
 
+Claude Desktop, Cursor and Windsurf list servers under `mcpServers`. VS Code lists them under `servers`, and the installer adds `"type": "stdio"` to its entry.
+
 <Tabs syncKey="os">
   <TabItem label="macOS">
     ```text
-    ~/Library/Application Support/Claude/claude_desktop_config.json
+    Claude Desktop  ~/Library/Application Support/Claude/claude_desktop_config.json
+    Cursor          ~/.cursor/mcp.json
+    VS Code         ~/Library/Application Support/Code/User/mcp.json
+    Windsurf        ~/.codeium/windsurf/mcp_config.json
     ```
   </TabItem>
   <TabItem label="Windows">
     ```text
-    %APPDATA%\Claude\claude_desktop_config.json
+    Claude Desktop  %APPDATA%\Claude\claude_desktop_config.json
+    Cursor          %USERPROFILE%\.cursor\mcp.json
+    VS Code         %APPDATA%\Code\User\mcp.json
+    Windsurf        %USERPROFILE%\.codeium\windsurf\mcp_config.json
     ```
     If `APPDATA` is unset, the installer falls back to `~\AppData\Roaming`.
   </TabItem>
   <TabItem label="Linux">
     ```text
-    ~/.config/Claude/claude_desktop_config.json
+    Claude Desktop  ~/.config/Claude/claude_desktop_config.json
+    Cursor          ~/.cursor/mcp.json
+    VS Code         ~/.config/Code/User/mcp.json
+    Windsurf        ~/.codeium/windsurf/mcp_config.json
     ```
   </TabItem>
 </Tabs>
+
+VS Code allows comments in `mcp.json`. The installer refuses a file it can't read as plain JSON, so add the entry by hand there.
 
 <Aside type="caution">
 The launcher, `mcp_launcher.sh`, is a bash script that runs `.venv/bin/python`. That layout is Unix. The installer knows the Windows config path, but the project sources don't describe a Windows run, so treat Windows as untested. `--basic-auth` needs the macOS `security` command and works on macOS only.
@@ -117,16 +136,16 @@ The launcher, `mcp_launcher.sh`, is a bash script that runs `.venv/bin/python`. 
 
 ### What the installer does
 
-- **Merges one entry.** It adds or replaces `mcpServers.<name>` and keeps every other key and server. It refuses a config whose `mcpServers` isn't an object (`error: 'mcpServers' in the existing config is not an object`).
-- **Backs up first.** If the config exists, it writes `claude_desktop_config.json.bak-<YYYYMMDD-HHMMSS>-<pid>` next to it, with a `-1`, `-2` suffix if the name is taken. The backup is a byte-exact copy and prints as `backup: <path>`.
+- **Merges one entry.** It adds or replaces `<servers key>.<name>` (`mcpServers`, or `servers` for VS Code) and keeps every other key and server. It refuses a config whose servers key isn't an object (`error: 'mcpServers' in the existing config is not an object`).
+- **Backs up first.** If the config exists, it writes `<config file>.bak-<YYYYMMDD-HHMMSS>-<pid>` next to it, with a `-1`, `-2` suffix if the name is taken. The backup is a byte-exact copy and prints as `backup: <path>`.
 - **Protects the key.** Both files are written atomically (temp file, then rename) at mode 600, because they can hold the API key.
 - **Refuses to overwrite a bad file.** If the config isn't valid JSON (`error: <path> is not valid JSON (...); refusing to overwrite it`) or isn't a JSON object, it exits with an error and changes nothing. An unreadable config, or a folder it can't write to, is a one-line error, checked before the Keychain is touched, so a failed run leaves no stray item.
-- **Warns when Claude Desktop looks missing.** If the default config folder doesn't exist, it prints `warning: <folder> does not exist; Claude Desktop doesn't seem to be installed` and creates the folder anyway.
+- **Warns when the client looks missing.** If the default config folder doesn't exist, it prints `warning: <folder> does not exist; <client> doesn't seem to be installed` and creates the folder anyway.
 - **Reads the key from `backend/.env`.** `--api-key` wins. With `--basic-auth` it doesn't copy the backend's key, because nginx adds it, and the entry gets an empty `CODESAGE_API_KEY`. Run directly with no key and no `--basic-auth`, it warns `no API key found (...); writing it empty`.
 - **Rejects bad URLs.** `error: --server-url must be an http(s) URL with a host`, and, for a URL with a password, an error that points you to `--basic-auth USER`.
 - **Keeps passwords out of the config.** The `--basic-auth` password is read by `security` from a prompt, never from the command line, and is never written to the file.
 
-On success it prints `updated <config>: mcpServers.<name> -> <repo>/mcp_launcher.sh` and `Restart Claude Desktop to pick it up.`
+On success it prints `updated <config>: <servers key>.<name> -> <repo>/mcp_launcher.sh` and `Restart <client> to pick it up.`
 
 ## Install by hand
 
@@ -150,7 +169,7 @@ If the file already has other servers, add the `codesage` object inside the exis
 
 ### Other MCP clients
 
-The bridge is a standard stdio MCP server, so any client that runs stdio servers can use it: Cursor, VS Code, Windsurf, Zed and others. Give that client the same `command` and `env` as above, in the file where it keeps its MCP servers. Cursor's `mcp.json` uses the same `mcpServers` shape; VS Code's `mcp.json` names the key `servers`. Only Claude Desktop has an installer, and it is the client CodeSage was tested with.
+Cursor and Windsurf take the same entry in their own files (see [Config file locations](#config-file-locations)). VS Code lists it under `servers` and adds `"type": "stdio"`. The bridge is a standard stdio MCP server, so any other client that runs stdio servers, such as Zed, takes the same `command` and `env` in its own format.
 
 ## The launcher
 

@@ -81,18 +81,18 @@ The reason is in `error_message`. The dashboard card, `GET /api/v1/repositories/
 | Stays `processing` although the server was killed | The process died before it could record a failure | Start the backend. Start-up marks the row `failed`. Then reprocess |
 | Some C or C++ files are missing | `.h`, `.hpp` and `.cc` are not in the extension map. Only `.c` and `.cpp` are | Known limit. See [Known limitations](/docs/limitations/) |
 
-## Claude Desktop and the bridge
+## MCP clients and the bridge
 
-The bridge writes to stderr, which Claude Desktop saves in its MCP log. See [Where to look](#where-to-look).
+The bridge writes to stderr, which your MCP client saves in its MCP log (Cursor and VS Code show it in the Output panel). See [Where to look](#where-to-look).
 
 | Symptom | Cause | Fix |
 | --- | --- | --- |
-| Server missing in Claude Desktop | The config was not reloaded | Restart Claude Desktop |
+| Server missing in the client | The config was not reloaded | Restart the client |
 | `.venv/bin/python not found` or "the Python dependencies are missing" (launcher) | No virtualenv, or the dependencies are not installed in it | `make setup` |
 | "no Keychain password found for ..." (launcher) | `CODESAGE_BASIC_AUTH_USER` is set but its Keychain entry is missing | Re-run the installer with `--basic-auth USER` |
 | "CodeSage backend not reachable at ..." | Backend not running, or `MCP_SERVER_URL` is wrong. `tools/list` still works | `make start-backend`, or correct the URL |
-| "rejected the API key (401)" | `CODESAGE_API_KEY` in the Claude config differs from `backend/.env` | Re-run `make install-claude`, then restart Claude Desktop |
-| "No API key is configured; set CODESAGE_API_KEY in the MCP server's env ..." | The backend needs a key and the Claude config has none. For a local backend the launcher also found none in `backend/.env` | Re-run `make install-claude` |
+| "rejected the API key (401)" | `CODESAGE_API_KEY` in the client's config differs from `backend/.env` | Re-run `make install-claude` (or your client's target), then restart Claude Desktop |
+| "No API key is configured; set CODESAGE_API_KEY in the MCP server's env ..." | The backend needs a key and the client's config has none. For a local backend the launcher also found none in `backend/.env` | Re-run `make install-claude` |
 | "The proxy in front of CodeSage rejected the login (401)" | Wrong user, or no Keychain entry for it | Re-run the installer with `--basic-auth USER` and enter the password |
 | "Refusing to send the CodeSage key or login over plain http to ..." | A remote `http://` URL with a key or login | Use `https://`, or set `CODESAGE_ALLOW_INSECURE_AUTH=1` on a trusted network |
 | "refused the request (403)" | The backend runs on another host and its `Host` is not allowed | Add the host to `ALLOWED_HOSTS` on the backend and check `MCP_SERVER_URL` |
