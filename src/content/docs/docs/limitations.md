@@ -17,6 +17,7 @@ These are limits of the current code, not bugs waiting for a fix. Each row says 
 | **Rate limits are per client address and in memory.** They reset on restart. | slowapi default storage, with no shared store | Everything behind one address shares one count. 30 per minute applies to tool calls |
 | **Dev and prod stacks cannot run together.** | Both publish port 80 | Stop one before starting the other |
 | **Dev hot reload kills a running index.** | `--reload` restarts the process, and start-up marks open runs `failed`, even a reprocess whose previous index is intact. The scheduled refresh skips failed repositories | Reprocess, and avoid saving files during a run |
+| **Semantic search needs your own embeddings key, and ranks by brute force.** Repositories indexed before the key was set have no vectors until they're reprocessed. | Vectors come from your provider, and cosine similarity is computed in Python, which is fine for thousands of definitions | Reprocess after setting the key. Use keyword search for very large repositories |
 | **Incremental runs still download every file**, and keep unchanged files' entities as an earlier parser produced them. | Changes are found by comparing content after the download | Use a full Reprocess after upgrading CodeSage |
 
 ## Indexing limits

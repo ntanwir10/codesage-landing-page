@@ -139,6 +139,7 @@ Full-text search over the Algolia index of functions, classes (including interfa
 | `entity_type` | string or null | No | none | One of `function`, `class`, `import`, `doc_section`, `terraform_block` |
 | `limit` | integer | No | 10 | 1 to 50. Results per page |
 | `page` | integer | No | 0 | 0 or more. Zero-based |
+| `mode` | `keyword` or `semantic` | No | `keyword` | `semantic` ranks definitions by meaning with the server's embeddings provider; it needs `EMBEDDING_API_KEY`. Hits carry the same fields plus `score`, with an empty `snippet`. Without a repository it covers every `completed` repository |
 
 ### How the search runs
 
