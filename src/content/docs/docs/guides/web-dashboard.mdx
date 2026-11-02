@@ -279,7 +279,7 @@ Toasts appear at the top right, can be dismissed by clicking them or the ✕, an
 | `Repository analysis complete`, `<name> is ready for search.` | Green, 6 s | A run reached `completed` while you were subscribed. Shown once per change. |
 | `Repository partially indexed`, `<name>: Partially indexed: ...` | Yellow, 8 s | A run reached `completed` but left files out. Shown instead of the green toast. |
 | `Repository analysis failed` with the reason | Red, 8 s | A run reached `failed` |
-| `API key rejected` | Red, 10 s | HTTP 401 or WebSocket close 1008. It says to set `VITE_CODESAGE_API_KEY` to the key the backend expects, then rebuild or restart the frontend. It fires once, then stays quiet until a request succeeds. |
+| `API key rejected` | Red, 10 s | HTTP 401 or WebSocket close 1008. It says to set `VITE_CODESAGE_API_KEY` to the key the backend expects, then rebuild or restart the frontend. It fires once, then stays quiet until a request succeeds. A `401` from the production login (nginx's basic auth) doesn't raise it: the browser asks you to sign in again. |
 | `Reprocessing started`, `Reprocessing not started`, `Failed to start reprocessing` | Green, yellow, red | See [Reprocess](#reprocess) |
 | `Repository deleted`, `Cannot delete while processing`, `Delete failed; nothing was deleted`, `Failed to delete repository` | Green, red | See [Delete](#delete) |
 
