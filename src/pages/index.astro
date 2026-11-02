@@ -41,7 +41,7 @@ const languages = [
 
 const docs = [
 	['Start here', [['Introduction', '/docs/introduction/'], ['Quick start', '/docs/quick-start/'], ['Installation in depth', '/docs/installation/']]],
-	['Guides', [['Web dashboard', '/docs/guides/web-dashboard/'], ['Claude Desktop', '/docs/guides/claude-desktop/'], ['Other git hosts', '/docs/guides/other-git-hosts/'], ['Using the REST API', '/docs/guides/rest-api/'], ['Docker dev stack', '/docs/guides/docker/'], ['Production deployment', '/docs/guides/production/']]],
+	['Guides', [['Web dashboard', '/docs/guides/web-dashboard/'], ['MCP clients', '/docs/guides/claude-desktop/'], ['Other git hosts', '/docs/guides/other-git-hosts/'], ['Using the REST API', '/docs/guides/rest-api/'], ['Docker dev stack', '/docs/guides/docker/'], ['Production deployment', '/docs/guides/production/']]],
 	['How it works', [['Architecture', '/docs/concepts/architecture/'], ['Indexing pipeline', '/docs/concepts/indexing-pipeline/'], ['Search and the Algolia index', '/docs/concepts/search/'], ['Data model', '/docs/concepts/data-model/'], ['Security model', '/docs/concepts/security/']]],
 	['Reference', [['MCP tools', '/docs/reference/mcp-tools/'], ['MCP endpoints and errors', '/docs/reference/mcp-endpoints/'], ['REST API', '/docs/reference/rest-api/'], ['WebSocket protocol', '/docs/reference/websocket/'], ['Configuration', '/docs/reference/configuration/'], ['Commands', '/docs/reference/commands/'], ['Supported languages', '/docs/reference/languages/']]],
 	['Help', [['Troubleshooting', '/docs/troubleshooting/'], ['Known limitations', '/docs/limitations/'], ['FAQ', '/docs/faq/'], ['Development', '/docs/development/']]],
@@ -50,7 +50,7 @@ const docs = [
 const quickstart = `make setup            # .venv, npm ci, backend/.env and a generated API key
 $EDITOR backend/.env  # ALGOLIA_APP_ID, ALGOLIA_ADMIN_API_KEY, GITHUB_TOKEN
 make start            # backend on :8001, dashboard on :5173
-make install-claude   # add CodeSage to Claude Desktop, then restart it`;
+make install-claude   # or install-cursor, install-vscode, install-windsurf; then restart the client`;
 ---
 
 <StarlightPage
@@ -169,14 +169,17 @@ make install-claude   # add CodeSage to Claude Desktop, then restart it`;
 			</p>
 			<p>
 				MCP clients reach the same backend through the stdio bridge: Claude Desktop, Cursor, VS Code, Windsurf,
-				Zed and others. For Claude Desktop, one command merges CodeSage into its config, backs up the old
-				file and keeps the key out of sight; other clients take the same <code>command</code> and <code>env</code> entry.
+				Zed and others. One command merges CodeSage into Claude Desktop, Cursor, VS Code or Windsurf, backs up the
+				old config and keeps the key out of sight; any other client takes the same <code>command</code> and <code>env</code> entry.
 			</p>
-			<Code lang="bash" wrap code={`make install-claude                 # merge CodeSage into the Claude Desktop config
-make install-claude ARGS=--dry-run  # preview first, with the key masked`} />
+			<Code lang="bash" wrap code={`make install-claude                 # Claude Desktop
+make install-cursor                 # Cursor
+make install-vscode                 # VS Code
+make install-windsurf               # Windsurf
+make install-claude ARGS=--dry-run  # preview the entry first, with the key masked`} />
 			<p class="cs-links">
 				<a href="/docs/guides/web-dashboard/">Dashboard guide</a>
-				<a href="/docs/guides/claude-desktop/">Claude Desktop guide</a>
+				<a href="/docs/guides/claude-desktop/">MCP client guide</a>
 			</p>
 		</div>
 		<figure class="cs-shot-hero">

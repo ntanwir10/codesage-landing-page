@@ -112,11 +112,11 @@ Full file contents and entities are in `backend/codesage.db`. Search records are
 
 Not in the local setup. Vite inlines `VITE_CODESAGE_API_KEY` into the JavaScript, so anyone who can load the dashboard can read it. That's fine on localhost for one user. The prod Docker stack keeps the key in nginx behind a login instead. See [Security](/docs/concepts/security/).
 
-## Using it with Claude
+## Using it with an MCP client
 
 ### Which MCP clients work?
 
-The bridge is a standard stdio MCP server, so any client that can launch a command with environment variables can use it. Point the client at `mcp_launcher.sh` and set `MCP_SERVER_URL` and `CODESAGE_API_KEY`. Only Claude Desktop has an installer. You can test the bridge with `npx @modelcontextprotocol/inspector ./mcp_launcher.sh`. See [Claude Desktop](/docs/guides/claude-desktop/#check-the-bridge-with-the-mcp-inspector).
+The bridge is a standard stdio MCP server, so any client that can launch a command with environment variables can use it. Claude Desktop, Cursor, VS Code and Windsurf have installers (`make install-claude`, `install-cursor`, `install-vscode`, `install-windsurf`); only Claude Desktop has been tested end to end. For any other client, point it at `mcp_launcher.sh` and set `MCP_SERVER_URL` and `CODESAGE_API_KEY`. You can test the bridge with `npx @modelcontextprotocol/inspector ./mcp_launcher.sh`. See [MCP clients](/docs/guides/claude-desktop/#check-the-bridge-with-the-mcp-inspector).
 
 ### Why does Claude say a repository is "still indexing" or "failed to index"?
 
@@ -158,14 +158,14 @@ With an API key set, the backend answers only to loopback hosts, the hosts in `C
 
 ### How do I rotate the API key?
 
-Delete the `CODESAGE_API_KEY` line in `backend/.env`, run `make setup`, run `make install-claude`, then restart the backend, Vite and Claude Desktop. See [Installation](/docs/installation/#rotate-the-key).
+Delete the `CODESAGE_API_KEY` line in `backend/.env`, run `make setup`, run `make install-claude` (or your client's target), then restart the backend, Vite and the client. See [Installation](/docs/installation/#rotate-the-key).
 
 ### How do I delete everything?
 
 1. Delete each repository in the dashboard. That removes its Algolia records and database rows.
 2. Run `make db-reset` to delete `backend/codesage.db` and its `-journal`, `-wal` and `-shm` files.
 3. Delete the Algolia index in your Algolia dashboard, if you no longer need it. `make db-reset` and `make clean` don't touch Algolia.
-4. Remove the `codesage` entry from the Claude Desktop config (the installer left `.bak-*` backups next to it that you can delete too).
+4. Remove the `codesage` entry from your MCP client's config (the installer left `.bak-*` backups next to it that you can delete too).
 5. On macOS, if you used `--basic-auth`, remove the Keychain item for service `codesage-mcp`.
 6. Optionally delete `.venv`, `frontend/node_modules` and the cloned folder. For Docker, `make clean` deletes the dev stack's containers, network and volume.
 

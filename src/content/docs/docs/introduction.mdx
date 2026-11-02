@@ -25,8 +25,8 @@ Both end at the same FastAPI backend.
   <Card title="Web dashboard" icon="laptop">
     Open `http://localhost:5173`, type `owner/repo` or paste a repository URL from any git host, and watch the repository index. Search it, reprocess it or delete it. See [the dashboard guide](/docs/guides/web-dashboard/).
   </Card>
-  <Card title="Claude Desktop (MCP)" icon="rocket">
-    Run `make install-claude`, restart Claude Desktop and ask about your code. Claude can add repositories too. See [the Claude Desktop guide](/docs/guides/claude-desktop/).
+  <Card title="MCP clients" icon="rocket">
+    Run `make install-claude`, `install-cursor`, `install-vscode` or `install-windsurf`, restart the client and ask about your code. Your assistant can add repositories too. See [the MCP client guide](/docs/guides/claude-desktop/).
   </Card>
 </CardGrid>
 
@@ -34,7 +34,7 @@ Both end at the same FastAPI backend.
 
 <Mermaid caption="Both entry points reach the same backend. nginx exists only in the Docker prod stack." code={`flowchart TB
     you(["You"]) --> browser["Web dashboard<br/>React + Vite"]
-    you --> claude["Claude Desktop"]
+    you --> claude["MCP client<br/>Claude Desktop, Cursor, VS Code, ..."]
     claude -- "tools/call over stdio" --> bridge["MCP bridge"]
     browser -- "REST and WebSocket" --> nginx["nginx, prod only<br/>HTTPS, login, adds the API key"]
     bridge -- "HTTP with the API key" --> nginx
@@ -51,7 +51,7 @@ In development there is no nginx: the dashboard and the bridge call the backend 
 | Component | What it is | Where |
 | --- | --- | --- |
 | Backend | FastAPI app with the REST API, the `/ws` WebSocket, the MCP tool endpoints and the indexing jobs. One process, one worker. | `backend/app` |
-| MCP bridge | A stdio MCP server that Claude Desktop starts through `mcp_launcher.sh`. It holds no data. It checks tool arguments and forwards them to the backend. | `backend/codesage_mcp` |
+| MCP bridge | A stdio MCP server that your MCP client starts through `mcp_launcher.sh`. It holds no data. It checks tool arguments and forwards them to the backend. | `backend/codesage_mcp` |
 | Dashboard | React and Vite single-page app. | `frontend/src` |
 | nginx | Prod stack only. Terminates HTTPS, asks for a login and adds the API key to each request. | `deployment/` |
 | Algolia | The search index. Holds one record per entity. | Your Algolia account |
@@ -71,7 +71,7 @@ Once a repository has status `completed`, ask your assistant questions in plain 
 - "Find every line that matches `TODO|FIXME` in the `docs/` folder."
 - "Add https://gitlab.com/group/project to CodeSage, then tell me when it is ready."
 
-Example prompts for each tool are in [Claude Desktop](/docs/guides/claude-desktop/#example-prompts-for-each-tool). The tool arguments are in the [MCP tools reference](/docs/reference/mcp-tools/).
+Example prompts for each tool are in [MCP clients](/docs/guides/claude-desktop/#example-prompts-for-each-tool). The tool arguments are in the [MCP tools reference](/docs/reference/mcp-tools/).
 
 ## Supported languages
 
@@ -86,7 +86,7 @@ Details, including which file extensions are picked up, are in [Languages](/docs
 
 ## Who it's for
 
-- You use Claude Desktop (or another MCP client) and want it to answer questions about code that isn't in the chat.
+- You use an MCP client such as Claude Desktop, Cursor or VS Code and want it to answer questions about code that isn't in the chat.
 - You work in a codebase too large to paste, or you explore unfamiliar open-source projects.
 - You want search that ranks names, docstrings and code together, and links each hit to the exact line.
 - You are comfortable running a Python backend and a Node dev server on your own machine, and you have (or can create) an Algolia account.
@@ -110,16 +110,16 @@ CodeSage is designed for one person on a trusted machine. Before you expose it o
 | Repository | A git repository you added to CodeSage, with a numeric ID and a name. GitHub repositories are named `owner/repo`. Others are named `<host>/<path>`. |
 | Entity | One searchable piece of code: a function, class, import, Markdown doc section or Terraform block. Each entity becomes one Algolia record. |
 | Index | The Algolia index (default name `codesage_code_entities`) that holds the entity records. Indexing is the act of filling it. |
-| MCP | Model Context Protocol, the standard way for an AI client such as Claude Desktop to call tools on a server. |
-| Bridge | The small stdio program (`python -m codesage_mcp`) that Claude Desktop runs. It speaks MCP to Claude and HTTP to the backend. |
+| MCP | Model Context Protocol, the standard way for an AI client such as Claude Desktop, Cursor or VS Code to call tools on a server. |
+| Bridge | The small stdio program (`python -m codesage_mcp`) that your MCP client runs. It speaks MCP to the client and HTTP to the backend. |
 | Tool | One of the eight MCP operations: `list_repositories`, `search_code`, `get_file`, `list_definitions`, `analyze_repository`, `find_patterns`, `find_references` and `add_repository`. |
 | Run (or job) | One background indexing pass over a repository. At most one run per repository and at most two runs at once. A run ends as `completed` or `failed`. |
 | Partial index | A run that ended `completed` but left something out, such as files over the 1000-file or 100 MB limit. The repository's `error_message` begins with `Partially indexed:` and the dashboard shows an amber card. |
 
 ## Where to go next
 
-<LinkCard title="Quick start" description="Install, configure, run, index a repository and connect Claude Desktop in five steps." href="/docs/quick-start/" />
+<LinkCard title="Quick start" description="Install, configure, run, index a repository and connect your MCP client in five steps." href="/docs/quick-start/" />
 <LinkCard title="Installation in depth" description="Prerequisites, Algolia and GitHub credentials, what make setup does and how to upgrade." href="/docs/installation/" />
 <LinkCard title="Web dashboard" description="Every page, message and state of the React dashboard." href="/docs/guides/web-dashboard/" />
-<LinkCard title="Claude Desktop" description="Install the bridge, tune its settings and try prompts for each tool." href="/docs/guides/claude-desktop/" />
+<LinkCard title="MCP clients" description="Install the bridge in Claude Desktop, Cursor, VS Code or Windsurf, tune its settings and try prompts for each tool." href="/docs/guides/claude-desktop/" />
 <LinkCard title="Architecture" description="Components, data flow and the indexing pipeline." href="/docs/concepts/architecture/" />
