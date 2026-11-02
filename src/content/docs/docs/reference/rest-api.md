@@ -543,7 +543,7 @@ Content-Type: application/json
 | Component | Check | Statuses |
 | --- | --- | --- |
 | `database` | Runs `SELECT 1` | `healthy`, `unhealthy` |
-| `algolia` | Calls `list_indices` with a 5-second timeout. The result is cached for 30 seconds | `healthy`, `degraded` (with `message: "Algolia is unreachable"`), `not_configured` |
+| `algolia` | Requests `GET 1/indexes` (one index) with a 5-second timeout. The result is cached for 30 seconds | `healthy`, `degraded` (with `message: "Algolia is unreachable"`), `not_configured` |
 
 | Database | Algolia | Overall `status` | HTTP |
 | --- | --- | --- | --- |

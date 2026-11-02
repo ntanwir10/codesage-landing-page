@@ -143,7 +143,7 @@ The bridge writes to stderr, which Claude Desktop saves in its MCP log. See [Whe
 | Symptom | Cause | Fix |
 | --- | --- | --- |
 | `/health` says `degraded` with `not_configured` | `ALGOLIA_APP_ID` or `ALGOLIA_ADMIN_API_KEY` is unset. Empty values and `your-...-here` placeholders count as unset. It is still HTTP `200` | Set both in `backend/.env` and restart |
-| `/health` says `degraded` with "Algolia is unreachable" | The probe (`list_indices`, 5 s) failed. The result is cached for 30 s | Check the network and the credentials. The log has "Algolia health check failed" |
+| `/health` says `degraded` with "Algolia is unreachable" | The probe (a `GET 1/indexes` request, 5 s) failed. The result is cached for 30 s | Check the network and the credentials. The log has "Algolia health check failed" |
 | Adding or reprocessing returns `503` | Algolia is not configured | As above |
 | "Search is not configured on the server (ALGOLIA_APP_ID / ALGOLIA_ADMIN_API_KEY are missing)." | Same cause, seen from a tool | As above |
 | "Search is unavailable; try again later." | Algolia is unreachable or rejected the query. The detail is in the log only | Read the backend log for "MCP search failed" |

@@ -69,7 +69,7 @@ These are limits of the current code, not bugs waiting for a fix. Each row says 
 | **Plain-words queries are English.** `queryLanguages` is `["en"]`. | Stop-word and plural rules are English | Use keywords in other languages |
 | **Delete returns before Algolia finishes.** | Algolia applies tasks in order, so a later re-add still lands after the delete | None needed |
 | **Suggestions need at least 2 characters** and return nothing on any error. | A broken suggestion box should not break the page | Use search |
-| **A synchronous Algolia client.** Calls run in worker threads. | The v3 client has no async API | None |
+| **A synchronous Algolia client.** Calls run in worker threads. | CodeSage uses the v4 client's synchronous `SearchClientSync` | None |
 
 ## MCP tools and the bridge
 
