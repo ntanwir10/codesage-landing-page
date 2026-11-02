@@ -147,7 +147,7 @@ make setup      # re-installs packages; keeps your .env files and your key
 - **In-memory databases** are created from the models directly and skip Alembic.
 - **Back up first.** Copy `backend/codesage.db` before an upgrade if the data matters. While the backend runs, SQLite also keeps `codesage.db-wal` and `codesage.db-shm` next to it.
 - **Reset.** `make db-reset` deletes `backend/codesage.db` and its `-journal`, `-wal` and `-shm` files. It does not touch Algolia, so the old records stay in the index. A search across all repositories can still return them, without a link.
-- **Restart behavior.** A server restart marks any repository left `pending` or `processing` as `failed` with `Processing was interrupted by a server restart; reprocess the repository`.
+- **Restart behavior.** A server restart starts any repository left `pending` or `processing` again as a full run.
 
 ## Files CodeSage creates
 

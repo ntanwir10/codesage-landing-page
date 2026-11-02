@@ -169,7 +169,7 @@ curl -k https://localhost/health                                       # prod he
 
 - **Only two make targets.** `make prod-build` and `make prod-up` are the prod targets. Every other Docker target uses the dev file, so call Compose directly for prod.
 - **Data.** The SQLite file is in the named volume `backend_data_prod`, which survives `down`. To wipe it, run `down -v` with the prod file. That does not clean Algolia, so delete repositories in the dashboard first, or remove the index in Algolia.
-- **Upgrades.** Pull the new code, then `make prod-build` and `make prod-up`. Migrations run at start-up. If a run was in progress, the restart marks it `failed`, and you reprocess it.
+- **Upgrades.** Pull the new code, then `make prod-build` and `make prod-up`. Migrations run at start-up. If a run was in progress, the restart starts it again as a full run.
 - **Do not run dev and prod together.** Both publish port 80.
 - **One worker.** Do not change `--workers 1`. See [Known limitations](/docs/limitations/).
 

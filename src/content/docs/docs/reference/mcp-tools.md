@@ -98,7 +98,7 @@ The real result, from a backend holding one finished and one failed repository. 
       "status": "failed",
       "total_files": 0,
       "total_entities": 0,
-      "error_message": "Processing was interrupted by a server restart; reprocess the repository",
+      "error_message": "No supported code files found in repository",
       "processed_at": null
     },
     {

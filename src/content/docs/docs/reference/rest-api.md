@@ -137,7 +137,7 @@ Create, get, list and update return this object. The same fields appear in the l
 }
 ```
 
-The status moves `pending` to `processing` to `completed` or `failed`. A completed repository returns to `processing` on a forced reprocess, and a failed one on any reprocess. A server restart marks every `pending` or `processing` repository `failed`. See [Indexing pipeline](/docs/concepts/indexing-pipeline/) and [Data model](/docs/concepts/data-model/).
+The status moves `pending` to `processing` to `completed` or `failed`. A completed repository returns to `processing` on a forced reprocess, and a failed one on any reprocess. A server restart starts every `pending` or `processing` repository again as a full run. See [Indexing pipeline](/docs/concepts/indexing-pipeline/) and [Data model](/docs/concepts/data-model/).
 
 :::note
 The SQLite driver returns timestamps without a UTC offset, so the example values above have none. Treat them as UTC.

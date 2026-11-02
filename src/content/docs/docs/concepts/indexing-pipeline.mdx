@@ -78,8 +78,7 @@ The check makes one attempt per call. It has no retries and no rate-limit sleeps
     processing --> failed: error or crash
     completed --> processing: reprocess with force_reprocess
     failed --> processing: reprocess
-    pending --> failed: server restart
-    processing --> failed: server restart
+    processing --> processing: server restart, runs again
     completed --> [*]: deleted
     failed --> [*]: deleted
     note right of completed: a partial index is noted in error_message
@@ -279,7 +278,7 @@ If neither finds anything, the framework stays empty. Because the search order f
 | **Run failure** | Any other exception rolls back and sets `failed` with a message of at most 500 characters, then broadcasts it | Red card with the reason |
 | **Partial index** | The run still ends `completed` and `error_message` starts with `Partially indexed:` | Amber card |
 | **Job crash** | If the task itself dies, the row is set to `failed` so it does not stay `processing` | "Processing stopped unexpectedly; reprocess the repository" |
-| **Server restart** | At start-up, every repository left `pending` or `processing` is set to `failed` | "Processing was interrupted by a server restart; reprocess the repository" |
+| **Server restart** | At start-up, every repository left `pending` or `processing` is started again as a full run, unless an external worker's job owns it | The repository shows `processing` again |
 | **Delete during a run** | Refused | `409` |
 
 How a failure message is written (`failure_message` in `security.py`):
