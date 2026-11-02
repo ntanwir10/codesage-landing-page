@@ -146,6 +146,8 @@ Why these numbers:
 
     **Incremental runs.** With `?incremental=true` or the [scheduled refresh](/docs/reference/configuration/), a file whose content and language match the previous run's is copied with its entities, without parsing, and keeps its Algolia records. Only changed and new files are parsed and indexed. Every file is still downloaded.
 
+    **Embed (bring your own key).** With [`EMBEDDING_API_KEY`](/docs/reference/configuration/) set, the run sends its definitions (not imports) that have no vector from the current model to the configured provider, 64 per request. Each text is the kind, name, path and the definition's lines. The vectors are stored in SQLite for semantic `search_code`. Reused files keep theirs, and a failing provider leaves a note in `error_message` without failing the run.
+
     **Swap.** Once indexing succeeds, the previous run's rows are deleted. A full run deletes every record but its own. An incremental run deletes earlier records only for previous paths it didn't reuse (changed, removed, or not stored this time), 50 paths per request. A run where nothing changed writes nothing to Algolia and just moves `commit_sha`.
 
 11. **Finish.** The run sets the primary language and the framework, adds a `Partially indexed:` note if something was left out, sets `completed` and `processed_at`, and broadcasts the final frame. See [How language and framework are detected](#how-language-and-framework-are-detected).

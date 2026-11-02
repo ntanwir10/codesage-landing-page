@@ -61,6 +61,9 @@ Without Algolia credentials the backend still starts. Adding or reprocessing a r
 | `ENABLE_RATE_LIMITING` | `true` | boolean | `false` switches every limit off |
 | `RATE_LIMIT_DEFAULT` | `100/minute` | limit string | Repository create, repository process and search suggestions |
 | `RATE_LIMIT_AI` | `30/minute` | limit string | MCP tool calls and MCP resource reads |
+| `EMBEDDING_API_URL` | `https://api.openai.com/v1/embeddings` | URL | Semantic search, bring your own key: any OpenAI-compatible embeddings endpoint (OpenAI, Voyage, a gateway, or a local Ollama at `http://localhost:11434/v1/embeddings`) |
+| `EMBEDDING_API_KEY` | unset | string | Turns semantic search on. Each run then embeds its definitions (not imports), and definitions and queries are sent to that provider. Ollama accepts any value |
+| `EMBEDDING_MODEL` | `text-embedding-3-small` | string | The embedding model. Changing it re-embeds on the next run, since vectors from different models don't compare |
 | `REFRESH_INTERVAL_MINUTES` | `0` (off) | number | Every N minutes, check each completed repository's branch (the freshness check, cached 10 minutes) and run an [incremental reindex](/docs/concepts/indexing-pipeline/) of those that moved. A `422` from the check, as after a force-push, also starts one. Busy repositories are skipped |
 
 A limit string is `<count>/<period>`, for example `100/minute` or `5/second`. Limits are counted per client address. Behind nginx, uvicorn takes the address from `X-Forwarded-For` in the production image. Repository update and delete, the WebSocket and the read routes have no limit. A rejected request gets `429` with a `Retry-After` header. See [Error shapes](/docs/reference/rest-api/#429-with-retry-after).
@@ -214,6 +217,11 @@ LOG_LEVEL=INFO
 # ENABLE_RATE_LIMITING=true
 # RATE_LIMIT_DEFAULT=100/minute
 # RATE_LIMIT_AI=30/minute
+
+# --- Semantic search, bring your own key (off while the key is empty) -------
+# EMBEDDING_API_URL=https://api.openai.com/v1/embeddings
+# EMBEDDING_API_KEY=
+# EMBEDDING_MODEL=text-embedding-3-small
 
 # --- Scheduled refresh (0 = off) ---------------------------------------------
 # REFRESH_INTERVAL_MINUTES=60
