@@ -1,12 +1,12 @@
 ---
 title: Introduction
-description: CodeSage indexes your repositories into Algolia and gives Claude eight tools to search and read them.
+description: CodeSage indexes your repositories into Algolia and gives any MCP client eight tools to search and read them.
 ---
 
 import { Aside, Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
 import Mermaid from '~/components/Mermaid.astro';
 
-Claude can't see your codebase. You can paste a file into a chat, but it can't search a repository, list the functions in a directory or open the file a stack trace points at. CodeSage closes that gap. It reads a repository once, breaks it into searchable pieces and stores them in Algolia. After that, Claude Desktop (or any other MCP client) can search the code, read files, list definitions and count things, all through eight tools.
+An AI assistant can't see your codebase. You can paste a file into a chat, but it can't search a repository, list the functions in a directory or open the file a stack trace points at. CodeSage closes that gap. It reads a repository once, breaks it into searchable pieces and stores them in Algolia. After that, any MCP client, such as Claude Desktop, Cursor or VS Code, can search the code, read files, list definitions and count things, all through eight tools.
 
 CodeSage is a self-hosted tool. You run it on your own machine or server, with your own Algolia account. There is no hosted demo and no CodeSage service to sign up for. It was built for the [Algolia MCP Server Challenge](https://dev.to/challenges/algolia-2025-07-09).
 
@@ -14,7 +14,7 @@ CodeSage is a self-hosted tool. You run it on your own machine or server, with y
 
 - **Indexes a repository.** CodeSage fetches the code files of a GitHub repository (or clones a public repository from another git host) and extracts functions, classes, methods, imports, Markdown doc sections and Terraform blocks. Each piece is called an entity.
 - **Stores two copies.** Full file contents and the entity list go into a local SQLite database. A searchable record per entity goes into your Algolia index.
-- **Serves Claude.** A small bridge program that Claude Desktop starts turns each tool call into an HTTP call to the CodeSage backend. Search goes to Algolia. Reading files and listing definitions go to SQLite.
+- **Serves MCP clients.** A small bridge program that your MCP client starts turns each tool call into an HTTP call to the CodeSage backend. Search goes to Algolia. Reading files and listing definitions go to SQLite.
 - **Shows progress.** A React dashboard adds repositories from GitHub, GitLab, Bitbucket or any https git host, shows indexing live over a WebSocket and searches the index.
 
 ## Two ways in
@@ -60,9 +60,9 @@ In development there is no nginx: the dashboard and the bridge call the backend 
 
 For the full picture see [Architecture](/docs/concepts/architecture/).
 
-## What you can ask Claude
+## What you can ask
 
-Once a repository has status `completed`, ask questions in plain words. Claude picks the tools.
+Once a repository has status `completed`, ask your assistant questions in plain words. It picks the tools.
 
 - "Search the zustand repository for where the store is created."
 - "List every class in `owner/repo` under `src/auth/`."

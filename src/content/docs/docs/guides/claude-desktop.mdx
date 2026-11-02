@@ -148,6 +148,10 @@ Copy `claude_desktop_config.example.json` into your Claude Desktop config. Set t
 
 If the file already has other servers, add the `codesage` object inside the existing `mcpServers`. Then restart Claude Desktop.
 
+### Other MCP clients
+
+The bridge is a standard stdio MCP server, so any client that runs stdio servers can use it: Cursor, VS Code, Windsurf, Zed and others. Give that client the same `command` and `env` as above, in the file where it keeps its MCP servers. Cursor's `mcp.json` uses the same `mcpServers` shape; VS Code's `mcp.json` names the key `servers`. Only Claude Desktop has an installer, and it is the client CodeSage was tested with.
+
 ## The launcher
 
 `mcp_launcher.sh` does four things before it hands over to the bridge:
