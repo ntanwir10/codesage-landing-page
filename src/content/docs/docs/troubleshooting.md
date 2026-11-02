@@ -56,7 +56,6 @@ The reason is in `error_message`. The dashboard card, `GET /api/v1/repositories/
 
 | Message | Cause | Fix |
 | --- | --- | --- |
-| "Processing was interrupted by a server restart; reprocess the repository" | The server stopped, or hot reload restarted it, during a run | Reprocess. Nothing retries on its own |
 | "Processing stopped unexpectedly; reprocess the repository" | The background task died | Reprocess. The backend log has "Background repository job crashed" |
 | "Algolia credentials not configured. Set ALGOLIA_APP_ID and ALGOLIA_ADMIN_API_KEY." | The credentials went away after the run was scheduled | Set them and reprocess |
 | "No supported code files found in repository" | Every file was filtered out: denied folders, lockfiles, unknown extensions, files of 1 MB or more | Check the [file rules](/docs/concepts/indexing-pipeline/#file-selection-rules) |
@@ -121,7 +120,7 @@ The bridge writes to stderr, which your MCP client saves in its MCP log (Cursor 
 | Empty reply on another hostname | The dev nginx drops unknown `Host` values with `444` | Use `localhost` or `127.0.0.1` |
 | Port 80 already in use | The prod stack, or another service | `docker compose -f <file> down` for the other stack |
 | Brief `502` right after `make up` | nginx starts as soon as the backend container starts, not when it is healthy | Wait a few seconds and reload |
-| A run failed with "interrupted by a server restart" after you saved a file | `--reload` restarted the server | Reprocess, and avoid saving files during a run |
+| A run started over from the beginning after you saved a file | `--reload` restarted the server, and a restart runs interrupted repositories again in full | Avoid saving backend files during a run |
 | Changes to the dashboard code do not appear | The bundle is built into the nginx image | `make build && make up`, or use `make start` for front-end work |
 
 ## Docker prod

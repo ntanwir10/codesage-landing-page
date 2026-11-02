@@ -146,7 +146,7 @@ Job state, the two-runs-at-once limit, WebSocket subscriptions and rate-limit co
 
 ### What happens if the backend restarts during indexing?
 
-At startup every repository left `pending` or `processing` is marked `failed` with `Processing was interrupted by a server restart; reprocess the repository`. There is no automatic retry. Reprocess it.
+At startup every repository left `pending` or `processing` is started again as a full run, so you don't need to do anything. Its previous index stays in place until that run completes. With external workers, a job whose worker stops sending heartbeats for 5 minutes is queued again for another worker.
 
 ### Why do I get `403 Host not allowed`?
 

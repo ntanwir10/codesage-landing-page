@@ -134,7 +134,7 @@ To use a different Algolia index, `export DOCKER_ALGOLIA_INDEX_NAME=your_index` 
 `backend/` is bind-mounted at `/app`, and uvicorn runs with `--reload --reload-dir app`. Edit a file under `backend/app/` and uvicorn restarts the server within a moment.
 
 <Aside type="note">
-A reload is a server restart. A repository that is indexing at that moment stops, and the new process marks it `failed` with "Processing was interrupted by a server restart". Reprocess it after your edit. Avoid saving files while a run is in progress.
+A reload is a server restart. A repository that is indexing at that moment stops, and the new process starts its run again from the beginning. Avoid saving files while a run is in progress.
 </Aside>
 
 The dashboard has no hot reload in this stack, because the bundle is built into the nginx image. For front-end work, run the dev servers directly with `make start` instead. See [Installation](/docs/installation/).

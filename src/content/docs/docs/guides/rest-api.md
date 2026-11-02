@@ -138,7 +138,7 @@ A real `failed` repository (id 1 in the test backend) reports its reason like th
   "processed_files": 0,
   "total_files": 0,
   "progress": 0.0,
-  "error_message": "Processing was interrupted by a server restart; reprocess the repository"
+  "error_message": "No supported code files found in repository"
 }
 ```
 
@@ -369,7 +369,7 @@ Tool failures are `200` responses with `is_error: true`. This one is real: searc
   "tool": "search_code",
   "result": null,
   "is_error": true,
-  "error": "Repository 'gitlab.com/gitlab-org/gitlab-test' failed to index: Processing was interrupted by a server restart; reprocess the repository. Reprocess it from the dashboard."
+  "error": "Repository 'gitlab.com/gitlab-org/gitlab-test' failed to index: No supported code files found in repository. Reprocess it from the dashboard."
 }
 ```
 
