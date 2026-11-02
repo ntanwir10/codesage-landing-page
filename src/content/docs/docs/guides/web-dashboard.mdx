@@ -251,6 +251,10 @@ The Dashboard page lists every repository.
 - An unknown path shows `Page not found` (`The page you're looking for doesn't exist.`) with **Go home**, inside the normal layout.
 - If a page hits a render error, the error boundary shows `Something went wrong` (`This page hit an unexpected error. Reloading usually fixes it.`) with **Reload page**. The navigation stays up, and moving to another page clears the error.
 
+## Light and dark theme
+
+The dashboard follows your system's light or dark setting. The ☾ / ☀ button at the right of the header (labelled "Switch to dark mode" or "Switch to light mode") switches it, and the choice is saved in the browser's local storage under `theme`, so it holds across reloads. A small script in `index.html` applies the theme before the page first paints, so a dark page never flashes light. If the browser blocks storage, the choice lasts until the page reloads.
+
 ## Connection indicator
 
 A small indicator sits at the bottom right of every page. It tracks the `/ws` connection. The socket opens only while something is subscribed: the repository page always subscribes to its repository, and the Dashboard subscribes to repositories that are still running. About a second after the last subscriber leaves, the socket closes.
