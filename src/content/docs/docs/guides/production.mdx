@@ -130,6 +130,7 @@ With a key set, the backend answers only to loopback hosts, the hosts named in `
 - **Behind a load balancer or CDN.** nginx would take every request's address from the balancer, so all users would share one rate limit and one WebSocket cap. Add `set_real_ip_from <the balancer's address range>;` and `real_ip_header X-Forwarded-For;` to the 443 server so nginx reads the client's address from the balancer's header. List only ranges you control: anyone else can set that header.
 - **Limits.** `client_max_body_size` is 2 MB. `/ws` allows idle connections for an hour. `/api/` times out after 60 s.
 - **Compression.** Text, CSS, JSON and JavaScript are gzipped.
+- **Caching.** `index.html` is sent with `Cache-Control: no-cache`, so browsers re-check it on every load. A cached copy would otherwise outlive an upgrade and ask for hashed assets the new build no longer has.
 - **Static files.** The dashboard is served from the nginx image, with `index.html` as the fallback for any path.
 
 ## Health behaviour

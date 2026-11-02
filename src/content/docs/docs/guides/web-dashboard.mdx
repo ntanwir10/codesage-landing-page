@@ -88,7 +88,7 @@ Every refusal appears in red under the repository field. The page stays on Home,
 | `Invalid or missing API key. Set VITE_CODESAGE_API_KEY to the key the server expects.` | 401 | The key in the bundle doesn't match the backend's. A red `API key rejected` toast also appears. |
 | `Too many requests. Please wait a moment and try again.` | 429 | More than 100 creates per minute from one address. |
 | `Server error (request <id>). Please try again later.` | 500 | An unexpected backend error. The ID matches the backend log. |
-| `Cannot reach the CodeSage server. Check that the backend is running.` | none | The browser got no answer. |
+| `Cannot reach the CodeSage server. Check that the backend is running.` | none, or 500 | The browser got no answer, or a proxy answered `500` without the backend's request ID (the Vite dev server does this when the backend isn't running). |
 | `The server took too long to respond. Try again.` | none | No answer within the dashboard's 30 s request timeout. |
 | The backend's own text, or `Request failed (403).` | 403 | The request guard refused the `Host` or `Origin`. |
 
