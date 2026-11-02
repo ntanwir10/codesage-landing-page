@@ -200,7 +200,17 @@ Without a start line, the link points at the file with no line anchor. In the da
 
 - A query shorter than 2 characters (after trimming) returns an empty list.
 - It asks Algolia for twice the requested limit (the limit is 1 to 20, default 10) and returns the distinct `entity_name` values in rank order. Like `search_code` without an entity type, it leaves imports out.
+- With `mode=semantic` it embeds the query and returns the names of the definitions closest in meaning instead (see [Search by meaning](#search-by-meaning)). Without an embeddings key it returns nothing.
 - Any failure returns an empty list, because a broken suggestion box should never break the page.
+
+## Search by meaning
+
+With [`EMBEDDING_API_KEY`](/docs/reference/configuration/) set, every indexing run also stores a vector for each definition (not imports), from the provider you configured. `search_code` with `mode: "semantic"`, and the dashboard's **By meaning** mode, embed the query with the same provider and rank definitions by cosine similarity to it. Algolia isn't involved:
+
+- Only vectors from the current `EMBEDDING_MODEL` compare, so after changing the model, reprocess.
+- Searching every repository leaves out any repository being reprocessed until it completes.
+- Every definition is ranked, so pages go past Algolia's 1000-hit limit, and each hit carries a `score` (the similarity, higher is closer).
+- The ranking runs in Python over the stored vectors, which is fine for thousands of definitions. See [Known limitations](/docs/limitations/).
 
 ## Waits and timeouts
 

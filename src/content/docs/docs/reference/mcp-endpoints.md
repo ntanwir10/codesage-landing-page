@@ -11,12 +11,12 @@ The stdio bridge turns each MCP request into an HTTP call under `/api/v1/ai`. Yo
 
 | Endpoint | Key | Rate limit | Purpose |
 | --- | --- | --- | --- |
-| `GET /api/v1/ai/mcp/capabilities` | No | None | Server name, version and tool names |
+| `GET /api/v1/ai/mcp/capabilities` | No | None | Server name, version, tool names and whether semantic search is on |
 | `GET /api/v1/ai/mcp/tools` | No | None | Every tool with its JSON Schema |
 | `POST /api/v1/ai/mcp/tools/call` | Yes | `RATE_LIMIT_AI` (30/minute) | Run one tool |
 | `GET /api/v1/ai/mcp/resources` | No | None | List resources |
 | `GET /api/v1/ai/mcp/resources/read?uri=...` | Yes | `RATE_LIMIT_AI` (30/minute) | Read one resource |
-| `GET /api/v1/ai/search/suggestions` | Yes | `RATE_LIMIT_DEFAULT` (100/minute) | Distinct entity names for auto-complete |
+| `GET /api/v1/ai/search/suggestions` | Yes | `RATE_LIMIT_DEFAULT` (100/minute) | Distinct entity names for auto-complete, by keyword or by meaning |
 
 The key is only compared when one is configured. With no `CODESAGE_API_KEY` on a loopback install, every endpoint accepts any request from a local client. See [Security](/docs/concepts/security/).
 
@@ -148,9 +148,12 @@ curl -sS http://127.0.0.1:8001/api/v1/ai/mcp/capabilities
     "find_patterns",
     "find_references",
     "add_repository"
-  ]
+  ],
+  "semantic_search": false
 }
 ```
+
+`semantic_search` is `true` while `EMBEDDING_API_KEY` is set. The dashboard shows its **By meaning** search mode only then.
 
 `name` and `version` come from `MCP_SERVER_NAME` and `MCP_SERVER_VERSION`.
 
@@ -243,6 +246,7 @@ Returns distinct entity names for auto-complete. The dashboard uses it. It searc
 | `query` | string | Yes | none | Shorter than 2 characters (after trimming) returns an empty list |
 | `limit` | integer | No | 10 | 1 to 20 |
 | `repository_id` | integer | No | all repositories | Filters to one repository |
+| `mode` | string | No | `keyword` | `keyword` or `semantic` |
 
 ```bash title="curl"
 curl -sS -H "X-API-Key: $CODESAGE_API_KEY" \
@@ -255,11 +259,13 @@ curl -sS -H "X-API-Key: $CODESAGE_API_KEY" \
 
 The backend asks Algolia for twice `limit` hits and keeps the first distinct `entity_name` values in rank order. Any Algolia failure, including missing credentials, returns `{"suggestions": []}` with status `200`.
 
+With `mode=semantic` it embeds the query with the server's provider instead and returns the names of the definitions closest in meaning, ranked like `search_code`'s semantic mode. Without an embeddings key, or if the provider fails, it returns `{"suggestions": []}`.
+
 | Status | Cause |
 | --- | --- |
 | `200` | Always, once the key and rate limit pass |
 | `401` | Missing or wrong key |
-| `422` | `query` is missing, or `limit` is outside 1 to 20 |
+| `422` | `query` is missing, `limit` is outside 1 to 20, or `mode` is not `keyword` or `semantic` |
 | `429` | Rate limit reached |
 
 ## How failures reach Claude

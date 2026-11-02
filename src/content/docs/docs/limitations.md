@@ -18,6 +18,7 @@ These are limits of the current code, not bugs waiting for a fix. Each row says 
 | **Dev and prod stacks cannot run together.** | Both publish port 80 | Stop one before starting the other |
 | **Dev hot reload restarts a running index.** | `--reload` restarts the process, and start-up runs interrupted jobs again in full | Avoid saving files during a run, or use external workers |
 | **Semantic search needs your own embeddings key, and ranks by brute force.** Repositories indexed before the key was set have no vectors until they're reprocessed. | Vectors come from your provider, and cosine similarity is computed in Python, which is fine for thousands of definitions | Reprocess after setting the key. Use keyword search for very large repositories |
+| **Each semantic suggestion in the dashboard is one embeddings call.** | Suggestions by meaning embed what you've typed, after a 500 ms pause | Switch the dashboard to Keyword if your provider charges per call |
 | **Incremental runs still download every file**, and keep unchanged files' entities as an earlier parser produced them. | Changes are found by comparing content after the download | Use a full Reprocess after upgrading CodeSage |
 
 ## Indexing limits
