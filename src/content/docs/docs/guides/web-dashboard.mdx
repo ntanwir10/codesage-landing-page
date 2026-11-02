@@ -43,7 +43,7 @@ The header shows the CodeSage name and two links, **Home** and **Dashboard**. Th
 
 <Shot src={homeShot} alt="The CodeSage Home page with the Add Repository form: a repository field with the placeholder owner/repo or https://gitlab.com/group/project, an optional branch field and an optional description field." caption="Home, with the Add Repository form." />
 
-Home shows the heading "Discover Code with AI", the **Add Repository** form, a three-step "How it works" strip (Submit Repository, AI Processing, Search and Ask Claude) and two feature cards (Smart Search and Claude Desktop).
+Home shows the heading "Discover Code with AI", the **Add Repository** form, a three-step "How it works" strip (Submit Repository, AI Processing, Search and Ask Your Assistant) and two feature cards (Smart Search and MCP Clients). The MCP Clients card names the install targets for Claude Desktop, Cursor, VS Code and Windsurf.
 
 ### Adding a repository
 
@@ -236,7 +236,7 @@ The Dashboard page lists every repository.
 - **Header.** `Repository Dashboard`, `Manage and explore your code repositories with real-time updates`, and an **Add Repository** button that goes to Home.
 - **Four tiles.** `Total Repositories`, `Completed`, `Processing` (pending and processing together) and `Failed`.
 - **The list.** Under `Your Repositories`, one card per repository, with `N repository processing` or `N repositories processing` when runs are active. Each card shows the name, description, status badge, **View Details** and a trash button (labelled `Delete <name>`). The body shows the files, lines, language (`Unknown` if none) and branch (`default` if none). A failed repository shows its reason in red. A completed repository that left files out shows its `Partially indexed` note in amber. A processing repository shows a progress bar with `N / M files processed` and a pulsing `Live updates`, or an indeterminate bar before the first batch. At the bottom, a source link reads **View on GitHub →** for github.com and **View source →** for any other host.
-- **Refreshing.** While any repository is `pending` or `processing` the list reloads every 3 seconds (every 15 seconds while the WebSocket is connected), and the page subscribes over the WebSocket to each active repository. Otherwise the list is considered fresh for 30 seconds, which picks up repositories added from another tab or by Claude.
+- **Refreshing.** While any repository is `pending` or `processing` the list reloads every 3 seconds (every 15 seconds while the WebSocket is connected), and the page subscribes over the WebSocket to each active repository. Otherwise the list is considered fresh for 30 seconds, which picks up repositories added from another tab or by an MCP client.
 - **Delete.** The same dialog as on the repository page, ending `...including search indexes.` The same toasts apply. A 404 is treated as success and the list refreshes.
 - **No reprocess here.** Open the repository and use its card.
 
@@ -292,6 +292,6 @@ Toasts appear at the top right, can be dismissed by clicking them or the ✕, an
 
 More fixes are in [Troubleshooting](/docs/troubleshooting/).
 
-<LinkCard title="Claude Desktop" description="Use the same index from Claude, including other git hosts." href="/docs/guides/claude-desktop/" />
+<LinkCard title="MCP clients" description="Use the same index from your AI assistant, including other git hosts." href="/docs/guides/claude-desktop/" />
 <LinkCard title="REST API guide" description="Do everything the dashboard does over HTTP." href="/docs/guides/rest-api/" />
 <LinkCard title="WebSocket reference" description="The frames behind live progress." href="/docs/reference/websocket/" />
