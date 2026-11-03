@@ -62,7 +62,7 @@ Without Algolia credentials the backend still starts. Adding or reprocessing a r
 | `ENABLE_RATE_LIMITING` | `true` | boolean | `false` switches every limit off |
 | `RATE_LIMIT_DEFAULT` | `100/minute` | limit string | Repository create, repository process, index freshness and search suggestions |
 | `RATE_LIMIT_AI` | `30/minute` | limit string | MCP tool calls and MCP resource reads |
-| `EMBEDDING_API_URL` | `https://api.openai.com/v1/embeddings` | URL | Semantic search, bring your own key: any OpenAI-compatible embeddings endpoint (OpenAI, Voyage, a gateway, or a local Ollama at `http://localhost:11434/v1/embeddings`) |
+| `EMBEDDING_API_URL` | `https://api.openai.com/v1/embeddings` | URL | Semantic search, bring your own key: any OpenAI-compatible embeddings endpoint (OpenAI, Voyage, a gateway, or a local Ollama at `http://localhost:11434/v1/embeddings`; from the Docker stacks it is `http://host.docker.internal:11434/v1/embeddings`, since `localhost` is the container) |
 | `EMBEDDING_API_KEY` | unset | string | Turns semantic search on. Each run then embeds its definitions (not imports), and definitions and queries are sent to that provider. Ollama accepts any value |
 | `EMBEDDING_MODEL` | `text-embedding-3-small` | string | The embedding model. Changing it re-embeds on the next run, since vectors from different models don't compare |
 | `REFRESH_INTERVAL_MINUTES` | `0` (off) | number | Every N minutes, check each completed repository's branch (the freshness check, cached 10 minutes) and run an [incremental reindex](/docs/concepts/indexing-pipeline/) of those that moved. A `422` from the check, as after a force-push, also starts one. Busy repositories are skipped |
