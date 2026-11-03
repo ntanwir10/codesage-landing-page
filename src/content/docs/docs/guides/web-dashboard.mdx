@@ -36,7 +36,7 @@ The header shows the CodeSage name and three links, **Home**, **Dashboard** and 
 | Home | `/` | Add a repository from GitHub or another git host |
 | Repository | `/repository/:id` | Watch progress, search, browse definitions, reprocess, delete |
 | File viewer | `/repository/:id/file?path=…&line=…&end=…` | Read an indexed file with the target lines highlighted |
-| Dashboard | `/dashboard` | See all repositories and delete one |
+| Dashboard | `/dashboard` | See all repositories, filter them by status and language, and delete one |
 | Search | `/search` | Search every indexed repository at once |
 | Not found | any other path | "Page not found", with a **Go home** button |
 
@@ -243,6 +243,7 @@ The Dashboard page lists every repository.
 - **Header.** `Repository Dashboard`, `Manage and explore your code repositories with real-time updates`, and an **Add Repository** button that goes to Home.
 - **Four tiles.** `Total Repositories`, `Completed`, `Processing` (pending and processing together) and `Failed`.
 - **The list.** Under `Your Repositories`, one card per repository, with `N repository processing` or `N repositories processing` when runs are active. Each card shows the name, description, status badge, **View Details** and a trash button (labelled `Delete <name>`). The body shows the files, lines, language (`Unknown` if none) and branch (`default` if none). A failed repository shows its reason in red. A completed repository that left files out shows its `Partially indexed` note in amber. A processing repository shows a progress bar with the stage and its counts, such as `Parsing and storing files… 200 / 214 files`, and a pulsing `Live updates`, or an indeterminate bar with the stage alone before the first batch. At the bottom, a source link reads **View on GitHub →** for github.com and **View source →** for any other host.
+- **Filters.** Above the cards, `All statuses` (Completed, Processing, Pending, Failed) and `All languages` (the languages of the listed repositories) narrow the list. They filter what is already loaded, so no request is made. While one is set, `Showing N of M` appears next to them. The four tiles still count every repository. The filters live in the URL, as `/dashboard?status=failed&language=python`, so a reload, Back or a shared link keeps them, and choosing All drops the key. A language from the URL that no repository has stays selected.
 - **Refreshing.** While any repository is `pending` or `processing` the list reloads every 3 seconds (every 15 seconds while the WebSocket is connected), and the page subscribes over the WebSocket to each active repository. Otherwise the list is considered fresh for 30 seconds, which picks up repositories added from another tab or by an MCP client.
 - **Delete.** The same dialog as on the repository page, ending `...including search indexes.` The same toasts apply, except a 404: the repository was already gone, so the list refreshes without a toast.
 - **No reprocess here.** Open the repository and use its card.
@@ -253,6 +254,7 @@ The Dashboard page lists every repository.
 | No repositories | `No repositories yet`, `Get started by adding your first repository to analyze with AI-powered search` and **Add Your First Repository** |
 | Load failed, nothing cached | `Failed to load repositories`, the error text and **Try Again** |
 | Refresh failed, data cached | `Couldn't refresh. Showing the last loaded data.` above the tiles |
+| Filters match nothing | `No repositories match these filters`, `Change or clear the status and language filters to see the rest.` and **Clear filters**, which empties the URL |
 
 ## Not found and crashes
 
