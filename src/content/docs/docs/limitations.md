@@ -66,7 +66,7 @@ These are limits of the current code, not bugs waiting for a fix. Each row says 
 | Limitation | Why | Workaround |
 | --- | --- | --- |
 | **Searching all repositories includes ones being reprocessed.** | A named repository must be `completed`, but a search without a name only filters on the query | Name the repository |
-| **During a reprocess, a search across all repositories can return both old and new records.** | A run writes its records under a new `run_id` and deletes the previous run's only when it completes | Name the repository, or wait for `completed` |
+| **Just before a reprocess completes, a search across all repositories can return both old and new records.** | A run writes its records under a new `run_id` and deletes the previous run's once they are indexed; the run completes when Algolia has applied that delete | Name the repository, or wait for `completed` |
 | **Ranking is relevance first.** `is_test` and `rank_weight` only break ties. | They are the index's `customRanking` | See [Search](/docs/concepts/search/#ranking) |
 | **Plain-words queries are English.** `queryLanguages` is `["en"]`. | Stop-word and plural rules are English | Use keywords in other languages |
 | **Delete returns before Algolia finishes.** | Algolia applies tasks in order, so a later re-add still lands after the delete | None needed |
