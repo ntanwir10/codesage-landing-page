@@ -6,7 +6,7 @@ description: How CodeSage builds Algolia records, configures the index, ranks re
 import { Aside } from '@astrojs/starlight/components';
 import Mermaid from '~/components/Mermaid.astro';
 
-CodeSage searches with Algolia. You bring your own Algolia application: there is no shared or hosted index. Each parsed entity (a function, a class, an import, a Markdown section or a Terraform block) becomes one Algolia record. The `search_code` tool queries those records, and leaves imports out unless you ask for them. Every other tool reads the database (SQLite or Postgres), because they need exact file text and Algolia only holds short summaries.
+CodeSage searches with Algolia. You bring your own Algolia application: there is no shared or hosted index. Each parsed entity (a function, a class, an import, a Markdown section or a Terraform block) becomes one Algolia record. The `search_code` tool queries those records, and leaves imports out unless you ask for them. Every other tool reads the database (SQLite or Postgres). The tools that return file text need the exact text, and Algolia only holds short summaries.
 
 `AlgoliaService` in [`backend/app/services/algolia_service.py`](https://github.com/ntanwir10/codesage-algolia-challenge/blob/master/backend/app/services/algolia_service.py) builds the records and applies the settings. The tool code in [`backend/app/services/mcp_tools.py`](https://github.com/ntanwir10/codesage-algolia-challenge/blob/master/backend/app/services/mcp_tools.py) shapes the results.
 
