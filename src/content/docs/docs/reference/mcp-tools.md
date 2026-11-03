@@ -5,7 +5,7 @@ description: Arguments, constraints, result shapes, limits and errors for the ei
 
 CodeSage serves eight tools and two resources to any MCP client. A client reaches them through a stdio bridge that forwards each call to the backend over HTTP. This page lists every argument, every result field and every error message the tools produce. For the HTTP side of the same calls, see [MCP HTTP endpoints](/docs/reference/mcp-endpoints/). For setup, see [MCP clients](/docs/guides/claude-desktop/).
 
-Argument schemas live in [`backend/codesage_mcp/schemas.py`](https://github.com/ntanwir10/codesage-algolia-challenge/blob/master/backend/codesage_mcp/schemas.py). The bridge answers `tools/list` from that file, so the list works even while the backend is down. Only tool calls and resource reads need the backend.
+Argument and result schemas live in [`backend/codesage_mcp/schemas.py`](https://github.com/ntanwir10/codesage-algolia-challenge/blob/master/backend/codesage_mcp/schemas.py). The bridge answers `tools/list` from that file, with an `inputSchema` and an `outputSchema` for each tool, so the list works even while the backend is down. Only tool calls and resource reads need the backend.
 
 ## Overview
 
@@ -26,7 +26,7 @@ Every tool call counts toward the rate limit of 30 per minute per client address
 
 - **Unknown arguments are rejected.** Every argument model sets `additionalProperties: false`. The bridge checks arguments first, and the backend checks them again.
 - **Failures are tool errors.** A failure the caller can act on (an unknown repository, a repository still indexing) comes back as a tool result with `is_error: true` and a one-line message. Transport and HTTP failures also come back as tool errors; see [How failures reach your assistant](/docs/reference/mcp-endpoints/#how-failures-reach-your-assistant).
-- **Results are JSON text.** The bridge returns the `result` object as pretty-printed JSON in one text block.
+- **Results are structured, and repeated as text.** A successful call returns the `result` object as `structuredContent`, which matches the tool's `outputSchema`, and the same object as pretty-printed JSON in one text block for clients that predate structured results. The output schemas list each tool's top-level fields and allow extra ones, so a field added later doesn't break a client that validates. A failed call is text only, with `isError` set.
 
 ## Resolving the `repository` argument
 

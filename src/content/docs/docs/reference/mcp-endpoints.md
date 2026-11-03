@@ -159,7 +159,7 @@ curl -sS http://127.0.0.1:8001/api/v1/ai/mcp/capabilities
 
 ## `GET /api/v1/ai/mcp/tools`
 
-Returns each tool with its description and its JSON Schema (`inputSchema`), the same schemas the bridge advertises.
+Returns each tool with its description and its JSON Schemas for arguments (`inputSchema`) and results (`outputSchema`), the same schemas the bridge advertises.
 
 ```bash title="curl"
 curl -sS http://127.0.0.1:8001/api/v1/ai/mcp/tools
@@ -175,6 +175,20 @@ curl -sS http://127.0.0.1:8001/api/v1/ai/mcp/tools
         "additionalProperties": false,
         "properties": {},
         "title": "ListRepositoriesArgs",
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": true,
+        "properties": {
+          "repositories": {
+            "description": "id, name, url, branch, commit_sha, status, total_files, total_entities, error_message, processed_at",
+            "items": { "additionalProperties": true, "type": "object" },
+            "title": "Repositories",
+            "type": "array"
+          }
+        },
+        "required": ["repositories"],
+        "title": "ListRepositoriesResult",
         "type": "object"
       }
     }
@@ -288,7 +302,7 @@ The bridge maps every backend result to a tool error message that says what to f
 | `5xx` with a JSON body | `CodeSage backend error (<status>): <detail> (request <id>)`. The request ID comes from the body's `request_id`, or the `X-Request-ID` header. A `500` always has one |
 | `5xx` without JSON (a proxy's HTML page) | `CodeSage backend error (<status>); the backend or the proxy in front of it may be down.` The body is not echoed |
 | Any other non-`200` | `Unexpected response from CodeSage backend (<status>): <detail>` |
-| `200` that is not a JSON object | `CodeSage backend returned an unexpected response; check MCP_SERVER_URL` |
+| `200` that is not a JSON object, or whose `result` is not one | `CodeSage backend returned an unexpected response; check MCP_SERVER_URL` |
 | `200` with `is_error: true` | The backend's `error` text, or `Tool failed` if it is empty |
 | Unknown tool name | `Unknown tool '<name>'. Available tools: <list>`. The bridge answers this itself and sends nothing |
 | Bad arguments caught by the bridge | `Invalid arguments for '<name>': <field>: <reason>; ...`. Nothing is sent |
