@@ -160,7 +160,7 @@ Both Compose files read `backend/.env` through `env_file`, then override some va
 | `CODESAGE_API_KEY` | From `backend/.env` | `${CODESAGE_API_KEY:-}` from your shell |
 | `ENVIRONMENT` | not set (`development`) | `production` |
 | `ALLOWED_HOSTS` | not set | `${ALLOWED_HOSTS:-}` from your shell |
-| `INDEX_WORKERS` | `${INDEX_WORKERS:-inline}` from your shell, so a value in `backend/.env` has no effect | not set (from `backend/.env`, default `inline`) |
+| `INDEX_WORKERS` | `${INDEX_WORKERS:-inline}` from your shell, so a value in `backend/.env` has no effect | not set (from `backend/.env`, default `inline`). The prod file has no worker service, so `external` there needs workers you run yourself, or repositories stay `pending` |
 
 Variables you export in your shell before `make up` or `make prod-up`:
 

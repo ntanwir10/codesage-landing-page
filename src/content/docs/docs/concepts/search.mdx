@@ -10,7 +10,7 @@ CodeSage searches with Algolia. You bring your own Algolia application: there is
 
 `AlgoliaService` in [`backend/app/services/algolia_service.py`](https://github.com/ntanwir10/codesage-algolia-challenge/blob/master/backend/app/services/algolia_service.py) builds the records and applies the settings. The tool code in [`backend/app/services/mcp_tools.py`](https://github.com/ntanwir10/codesage-algolia-challenge/blob/master/backend/app/services/mcp_tools.py) shapes the results.
 
-<Mermaid caption="One search_code call. Algolia ranks; the database is only asked for repository details such as the URL and indexed commit used to build links." code={`flowchart TD
+<Mermaid caption="One keyword search_code call (a search by meaning skips Algolia, see below). Algolia ranks; the database is only asked for repository details such as the URL and indexed commit used to build links." code={`flowchart TD
     call["search_code(query, repository, language, entity_type, limit, page)"] --> repo{"repository given?"}
     repo -- "yes" --> ready{"status completed?"}
     ready -- "no" --> refuse["Tool error: failed reason<br/>or indexing progress"]
@@ -173,7 +173,7 @@ Imports are searched only when you ask for `entity_type: "import"`. An import li
 
 The language and entity type values go through `_escape_filter_value`, which escapes backslashes and double quotes. A value cannot close the quote and add a filter clause of its own.
 
-Without a repository, `search_code` searches every repository. That includes repositories being reprocessed, since the filter only knows about the ID. Until a reprocess completes, a hit can come from the previous run's records or the new run's. See [Known limitations](/docs/limitations/).
+Without a repository, `search_code` searches every repository. That includes repositories being reprocessed, since the filter only knows about the ID. Until a reprocess completes, a hit can come from the previous run's records or the new run's. The previous run's records can also stay searchable for a short time after the run is `completed`, until Algolia applies the delete. See [Known limitations](/docs/limitations/).
 
 ## Results and source links
 

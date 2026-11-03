@@ -301,7 +301,7 @@ A `Partially indexed` note joins one or more of these causes with semicolons:
 - `search still holds old records for some changed or removed files until they change again or a full reprocess` (an incremental run's Algolia delete failed)
 - `search still holds the previous run's records until the next run` (a full run's Algolia delete failed)
 
-The Algolia wait is forgiving. If Algolia accepted the records but a task is not published after 300 s, the run logs a warning and carries on, because the records will become searchable shortly. The delete of the previous run's records is not waited on at all: Algolia applies an index's tasks in order, and a timeout must not throw away a good run. A delete request that fails leaves one of the last two notes above.
+The Algolia wait is forgiving. If Algolia accepted the records but a task is not published after 300 s, the run logs a warning and carries on, because the records will become searchable shortly. The delete of the previous run's records is not waited on at all: Algolia applies an index's tasks in order, and a timeout must not throw away a good run. A delete request that fails leaves one of the last two notes above. Either way a full reprocess removes the leftover records. An incremental run only removes them for the paths it did not reuse.
 
 Nothing retries a failed run by itself. Fix the cause (set `GITHUB_TOKEN`, repair the Algolia credentials, wait out a rate limit), then reprocess.
 

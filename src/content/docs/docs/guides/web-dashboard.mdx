@@ -221,7 +221,7 @@ If a background refresh fails but data is already on screen, the page keeps the 
 
 ## Search page
 
-`/search` (the **Search** link in the header) searches every indexed repository at once. It is the same search card as on a repository page, with the text `Search every indexed repository at once`, the same filters, suggestions and modes. Each result also names its repository (📦 `owner/repo`), and its name opens the file viewer in that repository. A repository being reprocessed is included, so a hit can come from its previous or its new run. A search by meaning leaves it out until the run completes.
+`/search` (the **Search** link in the header) searches every indexed repository at once. It is the same search card as on a repository page, with the text `Search every indexed repository at once`, the same filters, suggestions and modes. Each result also names its repository (📦 `owner/repo`), and its name opens the file viewer in that repository. A repository being reprocessed is included, so a hit can come from its previous or its new run. Opening such a hit shows the file viewer's refusal (`is still indexing`) until the run completes. A search by meaning leaves it out until the run completes.
 
 ## File viewer
 

@@ -202,7 +202,7 @@ In the default inline mode a `pending` status is never broadcast, and the first 
 
 When a run completes but left something out, `message` carries the `Partially indexed: ...` text instead.
 
-When a reprocess of a `completed` repository fails, its previous index stays, so the frame says `completed`, with the previous run's counts, no `error`, and `message` set to `Reprocessing failed: <reason>. Search still uses the previous index.`
+When a reprocess of a `completed` repository fails, its previous index stays, so the frame says `completed`, with the previous run's counts and no `error`. In inline mode `message` is `Reprocessing failed: <reason>. Search still uses the previous index.` With external workers there is no `message` (see the table above): read `error_message` from `/status`.
 
 ```json title="Failed"
 {
@@ -227,6 +227,8 @@ A frame goes out:
 1. When a run starts. The status is already `processing`, even if the run is still waiting for one of the two run slots.
 2. After each batch of 200 files is stored, with the new `processed_files`.
 3. When the run ends, as `completed` or `failed` (a failed reprocess of a completed repository ends as `completed`).
+
+With external workers the API relays what it reads every 2 seconds, so a subscriber gets one frame per change it sees, and fewer frames than the list above when a run moves faster than that.
 
 `total_files` keeps the previous run's value (`0` for a new repository) until the first batch is stored, because the file count is only known after the repository is fetched. Deleting a repository sends no frame; it drops that repository's subscribers.
 

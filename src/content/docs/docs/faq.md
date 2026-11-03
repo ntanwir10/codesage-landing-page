@@ -92,7 +92,7 @@ curl -X POST "http://127.0.0.1:8001/api/v1/repositories/1/process?force_reproces
   -H "X-API-Key: $CODESAGE_API_KEY"
 ```
 
-A reprocess builds the new index next to the old one, which stays searchable until the new run completes. Only then are the old records deleted. If the run fails, the old index stays and the repository stays `completed`.
+A reprocess builds the new index next to the old one, which stays in place until the new run completes. Only then are the old records deleted. Meanwhile a search across all repositories still finds the old records, but a search or tool call that names the repository is refused as still indexing, and the dashboard's search box is disabled. If the run fails, the old index stays and the repository stays `completed`.
 
 ## Privacy and data
 
