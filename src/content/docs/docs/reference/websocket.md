@@ -147,15 +147,15 @@ Sent to every connection subscribed to that repository.
 | Field | Type | Always present | Meaning |
 | --- | --- | --- | --- |
 | `repository_id` | integer | Yes | The repository |
-| `status` | string | Yes | `processing`, `completed` or `failed` |
+| `status` | string | Yes | `processing`, `completed` or `failed`. With external workers also `pending` |
 | `name` | string or null | Yes | Repository name |
 | `processed_files` | integer | Yes | Files stored so far |
 | `total_files` | integer | Yes | Files selected for the run |
 | `timestamp` | string | Yes | ISO 8601 UTC time the frame was built |
-| `message` | string | No | Present on the final frame |
-| `error` | string | No | Present only when the run failed. Up to 500 characters |
+| `message` | string | No | Present on the final frame. With external workers, not sent |
+| `error` | string | No | Present only when the status is `failed`. Up to 500 characters. A failed reprocess of a completed repository has none: its frame is `completed` |
 
-A `pending` status is never broadcast. The first frame of a run is `processing`.
+In the default inline mode a `pending` status is never broadcast, and the first frame of a run is `processing`. With `INDEX_WORKERS=external`, the workers run in other processes, so the API reads each active repository from the database every 2 seconds and relays any change, `pending` included.
 
 ```json title="Run started"
 {
@@ -202,6 +202,8 @@ A `pending` status is never broadcast. The first frame of a run is `processing`.
 
 When a run completes but left something out, `message` carries the `Partially indexed: ...` text instead.
 
+When a reprocess of a `completed` repository fails, its previous index stays, so the frame says `completed`, with the previous run's counts, no `error`, and `message` set to `Reprocessing failed: <reason>. Search still uses the previous index.`
+
 ```json title="Failed"
 {
   "type": "repository_status",
@@ -224,9 +226,9 @@ A frame goes out:
 
 1. When a run starts. The status is already `processing`, even if the run is still waiting for one of the two run slots.
 2. After each batch of 200 files is stored, with the new `processed_files`.
-3. When the run ends, as `completed` or `failed`.
+3. When the run ends, as `completed` or `failed` (a failed reprocess of a completed repository ends as `completed`).
 
-`total_files` is `0` until the first batch is stored, because the file count is only known after the repository is fetched. Deleting a repository sends no frame; it drops that repository's subscribers.
+`total_files` keeps the previous run's value (`0` for a new repository) until the first batch is stored, because the file count is only known after the repository is fetched. Deleting a repository sends no frame; it drops that repository's subscribers.
 
 A frame is only built if at least one connection is subscribed. Nothing replays missed frames, so after a reconnect, subscribe again and read `/status` once to catch up.
 

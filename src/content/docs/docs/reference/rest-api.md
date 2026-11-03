@@ -26,7 +26,7 @@ The backend is a FastAPI app. The dashboard uses these routes, and you can call 
 | `GET /api/v1/ai/...` | Mixed | Mixed | See [MCP HTTP endpoints](/docs/reference/mcp-endpoints/) |
 | `WS /ws` | Yes | Connection caps | See [WebSocket](/docs/reference/websocket/) |
 
-The limits are `RATE_LIMIT_DEFAULT` (100/minute) for create and process, and `RATE_LIMIT_AI` (30/minute) for the MCP routes. Update and delete have no rate limit. See [Configuration](/docs/reference/configuration/#rate-limits).
+The limits are `RATE_LIMIT_DEFAULT` (100/minute) for create, process and freshness, and `RATE_LIMIT_AI` (30/minute) for the MCP routes. Update and delete have no rate limit. See [Configuration](/docs/reference/configuration/#rate-limits).
 
 :::note
 Repository routes end with a slash (`/api/v1/repositories/`). A request without it normally gets a redirect from the framework, so send the slash to avoid an extra round trip.
@@ -100,9 +100,9 @@ Create, get, list and update return this object. The same fields appear in the l
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `id` | integer | Numeric ID |
-| `name` | string | Display name, at most 255 characters. Defaults to `owner/repo` |
+| `name` | string | Display name, at most 255 characters. Defaults to `owner/repo` on github.com and `<host>/<path>` on other hosts |
 | `description` | string or null | Free text |
-| `url` | string or null | Normalised `https://github.com/owner/repo`, at most 500 characters. Unique, compared case-insensitively on create |
+| `url` | string or null | Normalised `https://<host>/<path>`, such as `https://github.com/owner/repo`, at most 500 characters. Unique, compared case-insensitively on create |
 | `branch` | string or null | Branch to index. `null` means the repository's default branch |
 | `commit_sha` | string or null | The commit the index was built from; search links point at it. `null` until a run has fetched the files, and for repositories indexed before commits were recorded |
 | `language` | string or null | Primary programming language. Set by each run. At most 50 characters |
@@ -132,16 +132,13 @@ Create, get, list and update return this object. The same fields appear in the l
   "processed_files": 214,
   "total_lines": 31842,
   "created_at": "2026-10-26T14:00:02Z",
-  "updated_at": null,
+  "updated_at": "2026-10-26T14:03:11Z",
   "processed_at": "2026-10-26T14:03:11Z"
 }
 ```
 
-The status moves `pending` to `processing` to `completed` or `failed`. A completed repository returns to `processing` on a forced reprocess, and a failed one on any reprocess. A server restart starts every `pending` or `processing` repository again as a full run. See [Indexing pipeline](/docs/concepts/indexing-pipeline/) and [Data model](/docs/concepts/data-model/).
+The status moves `pending` to `processing` to `completed` or `failed`. A completed repository returns to `processing` on a forced reprocess, and a failed one on any reprocess. If a reprocess of a completed repository fails, it goes back to `completed` with its previous index and `error_message` set to `Reprocessing failed: <reason>. Search still uses the previous index.` A server restart starts every `pending` or `processing` repository again as a full run. See [Indexing pipeline](/docs/concepts/indexing-pipeline/) and [Data model](/docs/concepts/data-model/).
 
-:::note
-The SQLite driver returns timestamps without a UTC offset, so the example values above have none. Treat them as UTC.
-:::
 
 ## `GET /api/v1/repositories/`
 
@@ -170,20 +167,20 @@ The response is a JSON array of [repository objects](#repository-object).
 
 Adds a repository from GitHub or any https git host and starts a background indexing job. Needs the key. Limit 100/minute.
 
-The route accepts github.com URLs only. Other hosts are added through the [`add_repository`](/docs/reference/mcp-tools/#add_repository) tool. See [Other git hosts](/docs/guides/other-git-hosts/).
+The route accepts any https git host, like the [`add_repository`](/docs/reference/mcp-tools/#add_repository) tool. github.com is read through its API, every other host with git. See [Other git hosts](/docs/guides/other-git-hosts/).
 
 ### Body
 
 | Field | Type | Required | Default | Constraints |
 | --- | --- | --- | --- | --- |
-| `url` | string | Yes | none | At most 500 characters. A github.com URL, with optional `www.`, `.git`, trailing slash and `/tree/<branch>`. `http://` and `git@github.com:owner/repo.git` are rewritten to `https://`. Ports, credentials, queries and fragments are refused |
-| `name` | string | No | `""` | At most 255 characters. A blank name becomes `owner/repo` |
+| `url` | string | Yes | none | At most 500 characters. An https repository URL on any host, with optional `.git` and trailing slash (and `www.` on github.com). A branch suffix is understood: `/tree/<branch>` on GitHub, `/-/tree/<branch>` on GitLab, `/src/<branch>` on Bitbucket. `http://` and `git@host:path` forms are rewritten to `https://`. Ports, credentials, queries, fragments, `localhost` and private IP addresses are refused |
+| `name` | string | No | `""` | At most 255 characters. A blank name becomes `owner/repo` on github.com and `<host>/<path>` on other hosts |
 | `description` | string or null | No | `null` | Free text |
-| `branch` | string or null | No | `null` | At most 100 characters. Omitted or `null` uses the branch in the URL, if any. An empty string means the default branch, even if the URL has a branch. Refused when it has a `..` path segment, a NUL, or starts with `-` |
+| `branch` | string or null | No | `null` | At most 100 characters. Omitted or `null` uses the branch in the URL, if any. An empty string means the default branch, even if the URL has a branch. Refused when it breaks git's branch-name rules (`git check-ref-format`) or starts with `-` |
 | `language` | string or null | No | `null` | At most 50 characters. Replaced by the first run |
 | `framework` | string or null | No | `null` | At most 100 characters. Replaced by the first run |
 
-The stored `url` is rewritten to `https://github.com/<owner>/<repo>`, with the branch suffix and `.git` removed.
+The stored `url` is rewritten to `https://<host>/<path>`, with the branch suffix and `.git` removed.
 
 ```bash title="curl"
 curl -sS -X POST http://127.0.0.1:8001/api/v1/repositories/ \
@@ -218,7 +215,7 @@ curl -sS -X POST http://127.0.0.1:8001/api/v1/repositories/ \
 
 ### Order of checks and status codes
 
-Nothing is created when a check fails. The checks run in this order: key, request guard, rate limit, body validation, duplicate URL, Algolia configured, GitHub check.
+Nothing is created when a check fails. The checks run in this order: request guard, key, body validation, rate limit, duplicate URL, Algolia configured, repository check (GitHub's API, or `git ls-remote` on other hosts).
 
 | Status | Cause |
 | --- | --- |
@@ -231,9 +228,9 @@ Nothing is created when a check fails. The checks run in this order: key, reques
 | `429` | Rate limit reached |
 | `502` | GitHub rejected the server's `GITHUB_TOKEN`, answered with a 5xx, or could not be reached |
 | `503` | Algolia is not configured, or GitHub's API rate limit was reached (with `Retry-After`) |
-| `504` | The GitHub check did not answer within 10 seconds |
+| `504` | A GitHub check request did not answer within 10 seconds, or `git ls-remote` took longer than 10 seconds |
 
-The GitHub check makes one request for the repository and one for its branch, 10 seconds in total, with no retries.
+The GitHub check makes one request for the repository and one for its branch, 10 seconds each, with no retries.
 
 | Status | `detail` |
 | --- | --- |
@@ -277,7 +274,7 @@ Edits a repository. Needs the key. No rate limit. Only the fields you send chang
 | --- | --- | --- |
 | `name` | string | At most 255 characters. Must not be blank, and an explicit `null` is refused. Omit the field to keep the name |
 | `description` | string or null | Free text. `null` clears it |
-| `branch` | string or null | At most 100 characters. Refused when it has a `..` segment, a NUL, or starts with `-`. An empty string or `null` means the default branch and is stored as `null` |
+| `branch` | string or null | At most 100 characters. Refused when it breaks git's branch-name rules (`git check-ref-format`) or starts with `-`. An empty string or `null` means the default branch and is stored as `null` |
 | `language` | string or null | At most 50 characters |
 | `framework` | string or null | At most 100 characters |
 
@@ -287,7 +284,7 @@ curl -sS -X PUT http://127.0.0.1:8001/api/v1/repositories/7 \
   -d '{"description": "Demo service", "branch": "release"}'
 ```
 
-Changing the branch of a `completed` or `failed` repository first checks that the branch exists (`422` if not), then re-indexes it from the new branch and returns it as `processing`. A `pending` repository's first run reads the new branch anyway.
+Changing the branch of a `completed` or `failed` repository needs Algolia (`503` if it is not configured) and first checks the repository and the new branch on the host, with the same errors as on create (`422`, `502`, `503` or `504`). Then it re-indexes from the new branch and returns the repository as `processing`. A completed repository's old index stays searchable until that run completes, so there is no need to call `/process` afterwards: it would get `409`. A `pending` repository's first run reads the new branch anyway.
 
 | Status | Cause |
 | --- | --- |
@@ -295,7 +292,8 @@ Changing the branch of a `completed` or `failed` repository first checks that th
 | `401` | Missing or wrong key |
 | `404` | `Repository 7 not found` |
 | `409` | A run or a delete holds the repository and the request changes `branch`, `language` or `framework`. For example `Repository 7 is being processed; change branch when it finishes`. Other fields can change at any time, and sending the same value is not a change. A branch change also gets `Repository 7 is already being processed` if a run started while the new branch was being checked |
-| `422` | Validation. A blank name is `Value error, name cannot be empty` at `["body", "name"]`; a bad branch is `Value error, Invalid branch name` at `["body", "branch"]` |
+| `422` | Validation. A blank name is `Value error, name cannot be empty` at `["body", "name"]`; a bad branch is `Value error, Invalid branch name` at `["body", "branch"]`. A branch change can also get `422` as a string when the host check refuses the new branch |
+| `502`, `503`, `504` | A branch change only: the host check failed (`503` also when Algolia is not configured) |
 
 ## `DELETE /api/v1/repositories/{repository_id}`
 
@@ -435,7 +433,7 @@ curl -sS -X POST -H "X-API-Key: $CODESAGE_API_KEY" \
 {"message": "Processing started for repository 7", "repository_id": 7}
 ```
 
-For a `pending` or `failed` repository the route sets the status to `processing` and clears `error_message` before it returns, so a client polling `/status` never reads the old `failed`. A `completed` repository stays `completed` until the run starts, because a run keeps the previous index on failure only when it starts from `completed`. The run replaces the previous index only after the new files are fetched, so a transient GitHub error does not wipe a working index.
+For a `pending` or `failed` repository the route sets the status to `processing` and clears `error_message` before it returns, so a client polling `/status` never reads the old `failed`. A `completed` repository stays `completed` until the run starts, because a run keeps the previous index on failure only when it starts from `completed`. The run replaces the previous index only after it has stored and indexed everything, so a failed run, even a late one, does not wipe a working index.
 
 | Status | Cause |
 | --- | --- |

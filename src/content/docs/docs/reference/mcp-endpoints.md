@@ -179,7 +179,7 @@ curl -sS http://127.0.0.1:8001/api/v1/ai/mcp/tools
       }
     }
   ],
-  "count": 7
+  "count": 8
 }
 ```
 
@@ -279,7 +279,7 @@ The bridge maps every backend result to a tool error message that says what to f
 | No answer in 30 seconds | `CodeSage backend did not answer within 30 s.` |
 | Other transport error | `CodeSage backend request failed: <type>: <message>` |
 | `401` with a Basic `WWW-Authenticate` header | `The proxy in front of CodeSage rejected the login (401); check the user and password (CODESAGE_BASIC_AUTH_USER and its Keychain entry)` |
-| `401`, no key configured in the bridge | ``No API key is configured; set CODESAGE_API_KEY in the MCP server's env in your MCP client's config (for Claude Desktop, run `make install-claude`).`` For a local backend the launcher reads the key from `backend/.env` when the config leaves it empty, so this means that file has no key either |
+| `401`, no key configured in the bridge | ``No API key is configured; set CODESAGE_API_KEY in the MCP server's env in your MCP client's config (run `make install-claude`, or install-cursor, install-vscode or install-windsurf).`` For a local backend the launcher reads the key from `backend/.env` when the config leaves it empty, so this means that file has no key either |
 | `401`, key sent | `CodeSage backend rejected the API key (401); check CODESAGE_API_KEY in the MCP server config` |
 | `403` | `CodeSage refused the request (403): <detail>. If the backend runs on another host, add that host to ALLOWED_HOSTS on the backend and check MCP_SERVER_URL.` |
 | `404` | `The backend returned 404 for <path>; check that MCP_SERVER_URL points at the backend root (no /api/v1).` |

@@ -112,6 +112,7 @@ This protects the key. A hostile web page can re-point its own domain at `127.0.
 - Request bodies are capped at 2 MB. The API only takes small JSON, so there are no uploads.
 - Responses are gzipped above 1 KB.
 - Everything else falls back to `index.html`, so a refresh on `/repository/3` works.
+- `index.html` is sent with `Cache-Control: no-cache` (`expires -1`), so browsers re-check it on every load. A cached copy would otherwise outlive a rebuild and ask for hashed assets the new bundle no longer has.
 
 ## Settings the Compose file overrides
 
@@ -124,6 +125,7 @@ The `environment` block wins over `backend/.env`. These come from the Compose fi
 | `DATABASE_URL` | `sqlite:///./data/codesage.db` | Puts the database in the named volume |
 | `ALGOLIA_INDEX_NAME` | `${DOCKER_ALGOLIA_INDEX_NAME:-codesage_code_entities_docker}` | A separate index from a local run. Records are keyed by repository ID, so two databases on one index would delete each other's records |
 | `CORS_ORIGINS` | `http://localhost`, `http://localhost:3000`, `http://localhost:5173` | The origins allowed to write. Edit the file to change it |
+| `INDEX_WORKERS` | `${INDEX_WORKERS:-inline}` | Who runs indexing. It comes from your shell, so an `INDEX_WORKERS` in `backend/.env` has no effect here. See [Indexing workers](#indexing-workers-optional) |
 
 Not overridden: `CODESAGE_API_KEY`, `ALGOLIA_APP_ID`, `ALGOLIA_ADMIN_API_KEY` and `GITHUB_TOKEN` come from `backend/.env`. `ENVIRONMENT` stays `development`, so `/docs` is on.
 

@@ -33,7 +33,7 @@ The sources describe macOS and Linux paths for everything. The installer also kn
 
 ### Does it work without Algolia?
 
-Only in part. The backend starts, `/health` reports `degraded`, and the tools that read SQLite (`list_repositories`, `get_file`, `list_definitions`, `analyze_repository`, `find_patterns`) work on repositories that were indexed earlier. But you can't index anything new: adding or reprocessing a repository returns `503` with `Search indexing is not configured on the server (Algolia credentials are missing).`, and `search_code` returns `Search is not configured on the server (ALGOLIA_APP_ID / ALGOLIA_ADMIN_API_KEY are missing).` Empty values and `your-...-here` placeholders count as unset. See [Installation](/docs/installation/#get-algolia-credentials).
+Only in part. The backend starts, `/health` reports `degraded`, and the tools that read the database (`list_repositories`, `get_file`, `list_definitions`, `analyze_repository`, `find_patterns`) work on repositories that were indexed earlier. But you can't index anything new: adding or reprocessing a repository returns `503` with `Search indexing is not configured on the server (Algolia credentials are missing).`, and `search_code` returns `Search is not configured on the server (ALGOLIA_APP_ID / ALGOLIA_ADMIN_API_KEY are missing).` Empty values and `your-...-here` placeholders count as unset. See [Installation](/docs/installation/#get-algolia-credentials).
 
 ### Why does the backend need the Admin API key?
 
@@ -72,24 +72,27 @@ The run finished and the repository is searchable, but something was left out. T
 - `N of M files could not be stored` (a database batch failed);
 - `N files could not be parsed` (stored without entities);
 - `N files over the 1000-file or 100 MB limit were skipped`;
-- `the repository is too large to list in full, so some directories were not indexed`.
+- `N definitions have no semantic search vectors (the embedding API failed)`;
+- `the repository is too large to list in full, so some directories were not indexed`;
+- `search still holds old records for some changed or removed files until they change again or a full reprocess` (an incremental run could not delete them);
+- `search still holds the previous run's records until the next run` (the run could not delete them).
 
 The dashboard shows an amber card on the repository page. See [Web dashboard](/docs/guides/web-dashboard/#status-badge-and-card-colors).
 
 ### Can I index two branches of the same repository?
 
-No. The stored URL has no branch and must be unique, so a second add of the same repository, even with another branch, is refused as already added. Delete the repository and add it again with the other branch, or change the branch of the existing one (`PUT /api/v1/repositories/<id>` with a new `branch`, refused with `409` while a run is active) and reprocess it.
+No. The stored URL has no branch and must be unique, so a second add of the same repository, even with another branch, is refused as already added. Delete the repository and add it again with the other branch, or change the branch of the existing one (`PUT /api/v1/repositories/<id>` with a new `branch`, refused with `409` while a run is active). A completed or failed repository then re-indexes from the new branch by itself.
 
 ### How do I refresh an index after the repository changes?
 
-Reprocess it. CodeSage doesn't watch repositories. Use **Reprocess** on the repository page, or:
+Reprocess it, or set `REFRESH_INTERVAL_MINUTES` so the backend checks each completed repository's branch on a schedule and runs an incremental reindex when it moved. There are no webhooks. Use **Reprocess** on the repository page, or:
 
 ```bash
 curl -X POST "http://127.0.0.1:8001/api/v1/repositories/1/process?force_reprocess=true" \
   -H "X-API-Key: $CODESAGE_API_KEY"
 ```
 
-A reprocess fetches first and clears the old records only after the fetch succeeds.
+A reprocess builds the new index next to the old one, which stays searchable until the new run completes. Only then are the old records deleted. If the run fails, the old index stays and the repository stays `completed`.
 
 ## Privacy and data
 
@@ -98,15 +101,16 @@ A reprocess fetches first and clears the old records only after the fetch succee
 Your code touches these places, and the backend code contacts nothing else:
 
 - **GitHub.** The backend downloads files from `api.github.com` and `raw.githubusercontent.com`, with your token if set. Other hosts are cloned with `git`.
-- **Algolia.** One record per entity is sent to your index. A record holds `objectID`, `repository_id`, `file_path`, `entity_type`, `entity_name`, `description`, `parameters`, `return_type`, `line_start`, `line_end`, `language`, `signature`, `content`, `rank_weight`, `is_test`, `parameter_count` and `lines_of_code`. `content` is the signature plus at most 2000 characters of the entity body, and each record is trimmed to 9000 bytes. Whole files are not sent to Algolia.
-- **Your local SQLite file.** It holds the full text of every indexed file at `backend/codesage.db`.
+- **Algolia.** One record per entity is sent to your index. A record holds `objectID`, `repository_id`, `run_id`, `file_path`, `entity_type`, `entity_name`, `description`, `parameters`, `return_type`, `line_start`, `line_end`, `language`, `signature`, `content`, `rank_weight`, `is_test`, `parameter_count` and `lines_of_code`. `content` is the signature plus at most 2000 characters of the entity body, and each record is trimmed to 9000 bytes. Whole files are not sent to Algolia.
+- **Your embeddings provider, only if `EMBEDDING_API_KEY` is set.** For each definition the backend sends its kind, name, path and lines to `EMBEDDING_API_URL` (OpenAI by default), and each semantic query too.
+- **Your database.** It holds the full text of every indexed file: by default the SQLite file `backend/codesage.db`, or the Postgres database in `DATABASE_URL`.
 - **Your AI assistant.** What a tool returns, such as snippets or numbered file lines, becomes part of your conversation with the assistant.
 
-The backend makes outbound calls only to GitHub, Algolia and git remotes. It has no analytics or telemetry calls.
+The backend makes outbound calls only to GitHub, Algolia, git remotes and, with a key set, your embeddings provider. It has no analytics or telemetry calls.
 
 ### Where is my data stored?
 
-Full file contents and entities are in `backend/codesage.db`. Search records are in your Algolia index (`ALGOLIA_INDEX_NAME`, default `codesage_code_entities`). Your keys are in `backend/.env` and `frontend/.env`, both mode 600.
+Full file contents and entities are in the database: `backend/codesage.db` by default, or Postgres when `DATABASE_URL` points there. Search records are in your Algolia index (`ALGOLIA_INDEX_NAME`, default `codesage_code_entities`). Your keys are in `backend/.env` and `frontend/.env`, both mode 600.
 
 ### Is the API key in the dashboard a secret?
 
@@ -132,7 +136,7 @@ A regex search gives each file 1 second and the whole call 10 seconds, and skips
 
 ### I hit a rate limit. What are the limits?
 
-Per client address: 30 per minute for MCP tool calls and resource reads, and 100 per minute for repository create, process and search suggestions. Dashboard searches count toward the 30. The error is `429` with a `Retry-After` header.
+Per client address: 30 per minute for MCP tool calls and resource reads, and 100 per minute for repository create, process, freshness and search suggestions. Dashboard searches count toward the 30. The error is `429` with a `Retry-After` header.
 
 ## Running it
 
@@ -142,7 +146,7 @@ Yes, with the prod Docker stack: HTTPS on port 443, basic auth in nginx and the 
 
 ### Why only one worker?
 
-Job state, the two-runs-at-once limit, WebSocket subscriptions and rate-limit counters live in the process's memory, and SQLite allows one writer. A second worker would not see the first one's jobs. Both Compose stacks run exactly one.
+WebSocket subscriptions and rate-limit counters live in the API process's memory, and so do job state and the two-runs-at-once limit in the default inline mode. A second API process would not see the first one's runs or subscriptions. Both Compose stacks run exactly one. To spread the indexing, set `INDEX_WORKERS=external` and run `python -m app.worker` processes, which take jobs from the `jobs` table. See [Configuration](/docs/reference/configuration/).
 
 ### What happens if the backend restarts during indexing?
 

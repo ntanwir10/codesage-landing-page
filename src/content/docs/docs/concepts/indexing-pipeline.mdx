@@ -6,7 +6,7 @@ description: How CodeSage turns a git repository into stored files, parsed entit
 import { Aside, Steps } from '@astrojs/starlight/components';
 import Mermaid from '~/components/Mermaid.astro';
 
-An indexing run turns a repository into three things: file text in SQLite, parsed entities in SQLite, and one searchable record per entity in Algolia. A run is a background job inside the backend process. It always ends in `completed` or `failed`, and it always records a reason when something was left out or went wrong.
+An indexing run turns a repository into three things: file text in the database, parsed entities in the database, and one searchable record per entity in Algolia. A run is a background job inside the backend process, or in a worker process with `INDEX_WORKERS=external`. It always ends in `completed` or `failed`, and it always records a reason when something was left out or went wrong.
 
 This page covers the full path: how a repository gets added, what the run does in order, the limits it enforces, how it reads files from GitHub and from other hosts, and what happens when any step fails.
 
@@ -15,11 +15,11 @@ This page covers the full path: how a repository gets added, what the run does i
 Nothing is created until the repository has passed a pre-flight check. The check runs before the database row exists, so a typo in a URL never leaves a half-made repository behind.
 
 <Mermaid caption="From the create request to a scheduled job. Every refusal happens before a row exists." code={`flowchart TD
-    add["POST /api/v1/repositories/"] --> valid{"Valid GitHub URL<br/>and branch?"}
+    add["POST /api/v1/repositories/"] --> valid{"Valid https repository URL<br/>and branch name?"}
     valid -- "no" --> bad["422"]
     valid -- "yes" --> known{"Already added?"}
     known -- "yes" --> dup["409"]
-    known -- "no" --> ready{"Algolia set up and<br/>repo and branch on GitHub?"}
+    known -- "no" --> ready{"Algolia set up and<br/>repo and branch on its host?"}
     ready -- "no" --> refused["422, 502, 503 or 504<br/>nothing created"]
     ready -- "yes" --> create["Create the row<br/>status pending"]
     create --> created["201 with the repository"]
@@ -42,7 +42,7 @@ The dashboard shows every refusal under the repository field and stays on the Ho
 | "owner/repo has already been added", with an "Open it" link | 409 | Same URL as an existing repository. Case does not matter. The body also has `repository_id` |
 | "GitHub's API rate limit was reached; try again in about N minutes" | 503 | GitHub is rate-limiting the server. `Retry-After` says how long |
 | "GitHub rejected the server's GITHUB_TOKEN" or "Could not reach GitHub; try again" | 502 | The token is invalid, or GitHub is down or unreachable |
-| "GitHub did not respond in time; try again" | 504 | A check request took longer than 10 s |
+| "GitHub did not respond in time; try again" | 504 | A check request took longer than 10 s. The check makes up to two, so it can take about 20 s |
 | "Search indexing is not configured on the server" | 503 | `ALGOLIA_APP_ID` or `ALGOLIA_ADMIN_API_KEY` is unset |
 
 The check makes one attempt per call. It has no retries and no rate-limit sleeps, because the caller is an HTTP request that is waiting. A repository that passes can still fail later, during the run. The dashboard then shows the reason on its card.
@@ -75,7 +75,8 @@ The check makes one attempt per call. It has no retries and no rate-limit sleeps
     [*] --> pending: repository added
     pending --> processing: job starts
     processing --> completed: indexed
-    processing --> failed: error or crash
+    processing --> completed: reprocess failed, previous index kept
+    processing --> failed: error with no previous index, or crash
     completed --> processing: reprocess with force_reprocess
     failed --> processing: reprocess
     processing --> processing: server restart, runs again
@@ -108,7 +109,6 @@ Every limit below was checked against the code. File selection limits live in `F
 | Parsed body per entity | 60 lines and 2000 characters | `BODY_MAX_LINES`, `BODY_MAX_CHARS` in `code_parser.py` |
 | Records per Algolia request | 1000 | `INDEX_BATCH_SIZE` in `algolia_service.py` |
 | Wait for Algolia to publish an index task | 300 s | `INDEX_WAIT_SECONDS` |
-| Wait for Algolia to publish a delete | 120 s | `DELETE_WAIT_SECONDS` |
 | Recorded error message | 500 characters | `failure_message` in `security.py` |
 
 Why these numbers:
@@ -141,11 +141,11 @@ Why these numbers:
 
 9. **Parse and store.** Files are handled in batches of 200. For each file the run parses entities in a worker thread, builds a `CodeFile` row with its `CodeEntity` rows, and builds the Algolia records. The batch is committed in a worker thread, then `processed_files` is updated and progress is broadcast.
 
-10. **Index.** All new records go to Algolia in requests of 1000. The run fails if there are no records and nothing was reused ("No code entities were indexed from N files") or if Algolia rejects a request ("Algolia rejected the indexing request").
+10. **Index.** All new records go to Algolia in requests of 1000. The run fails if there are no records and nothing was reused ("No code entities were indexed from N files (F failed to process)") or if Algolia rejects a request ("Algolia rejected the indexing request").
 
     **Incremental runs.** With `?incremental=true` or the [scheduled refresh](/docs/reference/configuration/), a file whose content and language match the previous run's is copied with its entities, without parsing, and keeps its Algolia records. Only changed and new files are parsed and indexed. Every file is still downloaded.
 
-    **Embed (bring your own key).** With [`EMBEDDING_API_KEY`](/docs/reference/configuration/) set, the run sends its definitions (not imports) that have no vector from the current model to the configured provider, 64 per request. Each text is the kind, name, path and the definition's lines. The vectors are stored in SQLite for semantic `search_code`. Reused files keep theirs, and a failing provider leaves a note in `error_message` without failing the run.
+    **Embed (bring your own key).** With [`EMBEDDING_API_KEY`](/docs/reference/configuration/) set, the run sends its definitions (not imports) that have no vector from the current model to the configured provider, 64 per request. Each text is the kind, name, path and the definition's lines. The vectors are stored in the database for semantic `search_code`. Reused files keep theirs, and a failing provider leaves a note in `error_message` without failing the run.
 
     **Swap.** Once indexing succeeds, the previous run's rows are deleted. A full run deletes every record but its own. An incremental run deletes earlier records only for previous paths it didn't reuse (changed, removed, or not stored this time), 50 paths per request. A run where nothing changed writes nothing to Algolia and just moves `commit_sha`.
 
@@ -154,7 +154,7 @@ Why these numbers:
 </Steps>
 
 <Aside type="note">
-A repository made only of CSS, HTML, JSON, YAML, XML or SQL files fails at step 10. Those languages are stored and readable, but they produce no entities, so there is nothing to index. The error is "No code entities were indexed from N files".
+A repository made only of CSS, HTML, JSON, YAML, XML or SQL files fails at step 10. Those languages are stored and readable, but they produce no entities, so there is nothing to index. The error is "No code entities were indexed from N files (0 failed to process)".
 </Aside>
 
 ## Fetching by host
@@ -275,7 +275,8 @@ If neither finds anything, the framework stays empty. Because the search order f
 | --- | --- | --- |
 | **Parse failure** | The file is still stored, without entities, and counted as unparsed | `Partially indexed: N files could not be parsed` |
 | **Store failure** | A failed batch commit is rolled back, its files are counted as failed, its records are not indexed, and the run continues with the next batch | `Partially indexed: N of M files could not be stored` |
-| **Run failure** | Any other exception rolls back and sets `failed` with a message of at most 500 characters, then broadcasts it | Red card with the reason |
+| **Run failure** | Any other exception rolls back and discards what the run wrote. A repository with no previous index is set to `failed` with a message of at most 500 characters, then the failure is broadcast | Red card with the reason |
+| **Reprocess failure** | The same, but a repository that was `completed` gets its previous run's fields back and stays `completed`. Its index was never touched | Amber card: `Reprocessing failed: <reason>. Search still uses the previous index.` |
 | **Partial index** | The run still ends `completed` and `error_message` starts with `Partially indexed:` | Amber card |
 | **Job crash** | If the task itself dies, the row is set to `failed` so it does not stay `processing` | "Processing stopped unexpectedly; reprocess the repository" |
 | **Server restart** | At start-up, every repository left `pending` or `processing` is started again as a full run, unless an external worker's job owns it | The repository shows `processing` again |
@@ -288,16 +289,19 @@ How a failure message is written (`failure_message` in `security.py`):
 - Anything else is recorded as `ClassName: message`.
 - All messages are cut to 500 characters.
 
-If a reprocess had already cleared the old index before it failed, the message ends with " The previous index was removed; reprocess to rebuild it." That tells you the repository has nothing searchable until it is reprocessed.
+A failed reprocess of a `completed` repository records `Reprocessing failed: <reason>. Search still uses the previous index.` The repository stays `completed` and searchable, with the counts and commit of the run that is still in the index.
 
 A `Partially indexed` note joins one or more of these causes with semicolons:
 
 - `N of M files could not be stored`
 - `N files could not be parsed`
 - `N files over the 1000-file or 100 MB limit were skipped`
+- `N definitions have no semantic search vectors (the embedding API failed)`
 - `the repository is too large to list in full, so some directories were not indexed`
+- `search still holds old records for some changed or removed files until they change again or a full reprocess` (an incremental run's Algolia delete failed)
+- `search still holds the previous run's records until the next run` (a full run's Algolia delete failed)
 
-The Algolia wait is forgiving in one place. If Algolia accepted the records but a task is not published after 300 s, the run logs a warning and carries on, because the records will become searchable shortly. A timeout on the delete before a reprocess is not forgiven: it fails the run, to avoid leaving stale records.
+The Algolia wait is forgiving. If Algolia accepted the records but a task is not published after 300 s, the run logs a warning and carries on, because the records will become searchable shortly. The delete of the previous run's records is not waited on at all: Algolia applies an index's tasks in order, and a timeout must not throw away a good run. A delete request that fails leaves one of the last two notes above.
 
 Nothing retries a failed run by itself. Fix the cause (set `GITHUB_TOKEN`, repair the Algolia credentials, wait out a rate limit), then reprocess.
 
@@ -305,7 +309,7 @@ Nothing retries a failed run by itself. Fix the cause (set `GITHUB_TOKEN`, repai
 
 - **Delete.** A delete holds the repository's job slot while it works, so no run can start in the middle. It sends `delete_by` to Algolia and does not poll. That is safe because Algolia applies an index's tasks in order, so records indexed later under a reused id still land after the delete. If Algolia refuses the request, nothing is deleted and the API returns `502`.
 - **Delete order.** The service deletes entities, then files, with bulk queries, then the repository row. See [the data model](/docs/concepts/data-model/#cascades-and-delete-order).
-- **Reprocess.** A reprocess waits for the Algolia delete to finish before it indexes, so the delete cannot land after the new records.
+- **Reprocess.** A reprocess deletes nothing first. Its records carry a new `run_id`, so they never overwrite the previous run's. Only when it is complete does it delete the previous run's rows and send a `delete_by` for every record of the repository with another `run_id`, without waiting for it. Until then the old index stays searchable.
 - **Editing.** `PUT /repositories/{id}` returns `409` if it would change `branch`, `language` or `framework` while a job or a delete holds the repository.
 
 ## Progress broadcasting
@@ -318,6 +322,7 @@ The run pushes a `repository_status` frame to every WebSocket client subscribed 
 | After each batch of 200 files that stores successfully | `processing` | Files stored so far, and the count of downloaded files |
 | Run ends well | `completed` | Final counts. `message` is the partial-index note, or "Processing completed successfully" |
 | Run fails | `failed` | `error` has the reason, `message` is "Processing failed" |
+| Reprocess of a completed repository fails | `completed` | No `error`. `message` is `Reprocessing failed: <reason>. Search still uses the previous index.` Counts are the previous run's |
 
 A batch that fails to store sends no frame of its own. Each send has a 5-second timeout, and a client that stalls is dropped, so a stuck browser tab cannot slow a run down. The dashboard also polls the repository while it is in progress, every 3 seconds, or every 15 seconds while the WebSocket is connected, so a missed frame never leaves the page stale. The frame format is in [the WebSocket reference](/docs/reference/websocket/).
 

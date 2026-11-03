@@ -29,15 +29,16 @@ This page is for people changing CodeSage itself. To run it, start with [Quick s
     - core/ config, security, database, migrations
     - models/ SQLAlchemy tables
     - schemas/ pydantic models for the REST API
-    - services/ repository, GitHub, git, parser, Algolia, MCP tools, WebSocket, metrics
+    - services/ repository, GitHub, git, parser, Algolia, embeddings, MCP tools, WebSocket
     - main.py
+    - worker.py the external indexing worker (`INDEX_WORKERS=external`)
   - codesage_mcp/ stdio MCP bridge and the shared tool schemas
   - alembic/ migrations, applied at start-up
   - tests/ pytest suite
   - pyproject.toml ruff settings
   - pytest.ini
 - frontend/
-  - src/pages/ Home, Repository, Dashboard
+  - src/pages/ Home, Dashboard, Repository, File viewer, Search
   - src/components/ layout, forms, features, ui
   - src/services/ api.ts and websocket.ts
   - src/hooks/ and src/lib/
@@ -85,7 +86,11 @@ The test files:
 | `test_api_security.py`, `test_auth_integration.py`, `test_error_handlers.py` | The key, the request guard, rate limits, error shapes |
 | `test_mcp_tools.py`, `test_mcp_api.py`, `test_mcp_stdio_server.py` | The eight tools, their HTTP endpoints, and the bridge |
 | `test_websocket.py` | Auth, caps, frames and broadcast |
-| `test_migrations.py` | Upgrade, stamping and the dropped columns |
+| `test_migrations.py` | Upgrade, stamping, the dropped columns, downgrades, and that the migrations match the models |
+| `test_incremental_refresh.py`, `test_index_freshness.py` | Incremental runs, the scheduled refresh and the freshness check |
+| `test_job_queue.py` | The `jobs` table and external workers |
+| `test_postgres.py` | Migrations, column types and the job claim on a real Postgres (skipped without `TEST_POSTGRES_URL`) |
+| `test_semantic_search.py` | Embeddings and search by meaning |
 | `test_install_claude_desktop.py`, `test_ensure_api_key.py` | The scripts in `scripts/` |
 
 ### Frontend
@@ -95,7 +100,7 @@ cd frontend && npm test          # vitest run (single pass)
 cd frontend && npx vitest        # watch mode
 ```
 
-Vitest uses jsdom with globals on, and `src/test/setup.ts` as its setup file. Tests sit next to the code they cover as `*.test.ts` or `*.test.tsx`: the four pages, the `useRealtimeStatus` hook, `ErrorBoundary`, `services/api` and `services/websocket`, and the `lib` helpers for errors, polling and the query client. They are unit tests, with no browser and no backend.
+Vitest uses jsdom with globals on, and `src/test/setup.ts` as its setup file. Tests sit next to the code they cover as `*.test.ts` or `*.test.tsx`: the Home, Dashboard, Repository and file viewer pages, the add form, the search interface, the definitions browser and several UI components, the `useRealtimeStatus` hook, `ErrorBoundary`, `services/api` and `services/websocket`, and the `lib` helpers for errors, polling and the query client. They are unit tests, with no browser and no backend.
 
 ### End-to-end
 
@@ -124,14 +129,15 @@ Ruff is configured in `backend/pyproject.toml`: target `py313`, rules `E`, `F`, 
 
 ## CI
 
-The workflow is [`.github/workflows/ci.yml`](https://github.com/ntanwir10/codesage-algolia-challenge/blob/master/.github/workflows/ci.yml). It runs on pushes to `master` and on every pull request, with a read-only token (`contents: read`). Three jobs run on `ubuntu-latest`.
+The workflow is [`.github/workflows/ci.yml`](https://github.com/ntanwir10/codesage-algolia-challenge/blob/master/.github/workflows/ci.yml). It runs on pushes to `master` and on every pull request, with a read-only token (`contents: read`). A newer push to a pull request cancels the run still going for the older one. Five jobs run on `ubuntu-latest`, each with a time cap: 15 minutes for `backend`, `frontend` and `postgres`, 20 for `e2e` and 25 for `docker`.
 
 | Job | Steps |
 | --- | --- |
 | `backend` (working directory `backend`) | Check out. Set up Python 3.13 with the pip cache keyed on `backend/requirements*.txt`. `pip install -r requirements-dev.txt`. `ruff check . ../scripts`. `python -m pytest` |
 | `frontend` (working directory `frontend`) | Check out. Set up Node 22 with the npm cache keyed on `package-lock.json`. `npm ci`. `npm run lint`. `npm run build`. `npm test --if-present` |
+| `postgres` (working directory `backend`) | A Postgres 16 service container. Set up Python 3.13, `pip install -r requirements-dev.txt`, then `python -m pytest tests/test_postgres.py -v` with `TEST_POSTGRES_URL` pointing at the service |
 | `e2e` (working directory `frontend`) | Check out. Set up Python 3.13 and `pip install -r ../backend/requirements.txt`. Set up Node 22. `npm ci`. `npx playwright install --with-deps chromium`. `npm run test:e2e` with `E2E_PYTHON=python`. On a failure, upload `frontend/test-results/` (the Playwright traces) as an artifact |
-| `docker` | Check out. Write a throwaway `backend/.env` (Compose reads it through `env_file`) with a CI-only `CODESAGE_API_KEY` and fake Algolia keys. `docker compose -f deployment/docker-compose.yml config -q`. The same for `docker-compose.prod.yml`. `docker build -f backend/Dockerfile.prod backend`. `nginx -t` on the dev config, with `backend` mapped to a dummy address. `nginx -t` on the rendered prod template, using a throwaway certificate, htpasswd and key. Then the dev stack smoke test (below) |
+| `docker` | Check out. Write a throwaway `backend/.env` (Compose reads it through `env_file`) with a CI-only `CODESAGE_API_KEY` and fake Algolia keys. `docker compose -f deployment/docker-compose.yml config -q`. The same for `docker-compose.prod.yml`. `docker build -f backend/Dockerfile.prod backend`. `nginx -t` on the dev config, with `backend` mapped to a dummy address. `nginx -t` on the rendered prod template, using a throwaway certificate, htpasswd and key. A check that every `proxy_pass` in the prod template overwrites `X-Forwarded-For`. Then the dev stack smoke test (below) |
 
 The smoke test runs `docker compose -f deployment/docker-compose.yml up -d --build`, which builds both dev images, and then checks four things:
 
@@ -165,11 +171,11 @@ The schema is owned by Alembic. The models in `app/models/` are the source of tr
    make test
    ```
 
-5. **Update the test constant.** `tests/test_migrations.py` has a `HEAD` constant naming the latest revision. Change it and add a case for what your migration does.
+5. **Update the test constant.** `tests/test_migrations.py` has a `HEAD` constant naming the latest revision. Change it and add a case for what your migration does. `test_migrations_match_the_models` fails if a model gains a column that no migration adds.
 
 </Steps>
 
-The server also runs migrations at start-up, so a new revision applies the next time the backend starts. The existing revisions use short names (`baseline`, `cleanup`, `drop_unused_columns`) instead of hashes. See [Data model](/docs/concepts/data-model/#migrations) for what each does.
+The server also runs migrations at start-up, so a new revision applies the next time the backend starts. The six existing revisions use short names (`baseline`, `cleanup`, `drop_unused_columns`, `commit_sha`, `entity_embeddings`, `jobs`) instead of hashes. See [Data model](/docs/concepts/data-model/#migrations) for what each does.
 
 <Aside type="caution">
 A database that has the app tables but no `alembic_version` is stamped at `baseline` and then upgraded. If you rename or reorder revisions, that rule breaks for old databases.
