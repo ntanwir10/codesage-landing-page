@@ -96,7 +96,7 @@ Details, including which file extensions are picked up, are in [Languages](/docs
 - **Not a hosted service.** Nobody runs CodeSage for you. You supply the Algolia account and, optionally, a GitHub token.
 - **Not a code-execution tool.** CodeSage reads and searches text. It never runs, builds or tests the code it indexes.
 - **Read-only, with one exception.** Seven of the eight tools only read. `add_repository` is the one tool that changes state: it creates a repository record and starts indexing.
-- **Not a live view.** It indexes a snapshot of a branch. Changes to the repository after indexing don't appear until you reprocess it, or until the optional scheduled refresh (`REFRESH_INTERVAL_MINUTES`, off by default) re-indexes the branches that moved.
+- **Not a live view.** It indexes a snapshot of a branch. Changes to the repository after indexing don't appear until you reprocess it, or until the optional scheduled refresh (`REFRESH_INTERVAL_MINUTES`) or GitHub push webhook (`GITHUB_WEBHOOK_SECRET`), both off by default, re-indexes the branches that moved.
 - **Not multi-user.** There is one shared API key and no per-user permissions.
 
 <Aside type="caution">

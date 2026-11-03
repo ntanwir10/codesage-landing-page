@@ -179,7 +179,7 @@ Do not expose the dev stack to a network. If you must serve the dashboard to oth
 | Role | What it does |
 | --- | --- |
 | TLS | Port 443 only serves TLS 1.2 and 1.3, using `deployment/ssl/cert.pem` and `key.pem`. TLS 1.2 accepts only forward-secret ECDHE suites with AES-GCM or ChaCha20-Poly1305, so a recorded session can't be decrypted later with a leaked key. Port 80 answers `/health` and redirects everything else to HTTPS with `301`, so a password never crosses plain HTTP |
-| Basic auth | Port 443 requires a login from `deployment/htpasswd`. `/health` is the one exception |
+| Basic auth | Port 443 requires a login from `deployment/htpasswd`. The exceptions are `/health` and `/api/v1/webhooks/github`, which the backend authenticates by the HMAC signature GitHub sends, with no API key |
 | Request limit | 10 requests a second per address on port 443, in bursts of up to 50, then `429`. It runs before the login, so it also slows password guessing |
 | Key injection | Sets `X-API-Key` itself on every `/api/` and `/ws` request, and clears `Authorization`. The browser never holds the key, and the backend never sees the login |
 | Forwarded headers | Overwrites `X-Forwarded-For` with the real client address and sets `X-Forwarded-Proto` to `https`. It passes `Host` with its port (`$http_host`), which the origin check compares with the browser's `Origin` |

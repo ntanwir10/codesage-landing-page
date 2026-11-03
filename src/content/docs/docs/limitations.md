@@ -13,7 +13,7 @@ These are limits of the current code, not bugs waiting for a fix. Each row says 
 | **SQLite by default; Postgres is less tested.** | CI runs the migrations, column types and the job claim against Postgres 16; the rest of the suite runs on SQLite | Set `DATABASE_URL=postgresql://…` and check your workload |
 | **No high availability.** | One process, one file | Back up the database volume, and keep in mind that reprocessing rebuilds everything from the source host |
 | **A failed run is not retried.** An interrupted one is: start-up runs it again in full. | A failure usually needs a fix (a branch, a key, a host); an interruption doesn't | Reprocess from the dashboard, or `POST /api/v1/repositories/{id}/process` |
-| **Upstream changes arrive only on a schedule or a reprocess.** | There are no webhooks; the scheduled refresh (`REFRESH_INTERVAL_MINUTES`, off by default) checks branches | Turn the refresh on, or reprocess |
+| **Upstream changes arrive only on a push, a schedule or a reprocess.** | The GitHub push webhook (`GITHUB_WEBHOOK_SECRET`) and the scheduled refresh (`REFRESH_INTERVAL_MINUTES`) are both off by default. The webhook covers GitHub only, and a push that arrives during a run is not queued | Turn one on, or reprocess |
 | **Rate limits are per client address and in memory.** They reset on restart. | slowapi default storage, with no shared store | Everything behind one address shares one count. 30 per minute applies to tool calls |
 | **Dev and prod stacks cannot run together.** | Both publish port 80 | Stop one before starting the other |
 | **Dev hot reload restarts a running index.** | `--reload` restarts the process, and start-up runs interrupted jobs again in full | Avoid saving files during a run, or use external workers |
