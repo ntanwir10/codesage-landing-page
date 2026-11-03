@@ -11,14 +11,14 @@ Argument schemas live in [`backend/codesage_mcp/schemas.py`](https://github.com/
 
 | Tool | Reads from | Needs a `completed` repository | Required arguments | What it returns |
 | --- | --- | --- | --- | --- |
-| [`list_repositories`](#list_repositories) | SQLite | No | none | Every repository with status and size |
+| [`list_repositories`](#list_repositories) | Database | No | none | Every repository with status and size |
 | [`search_code`](#search_code) | Algolia | Only if `repository` is given | `query` | Ranked hits with file locations, snippets and source links |
-| [`get_file`](#get_file) | SQLite | Yes | `repository`, `path` | A file with line numbers, at most 400 lines per call |
-| [`list_definitions`](#list_definitions) | SQLite | Yes | `repository` | Entities ordered by file and line |
-| [`analyze_repository`](#analyze_repository) | SQLite | Yes | `repository` | Counts, languages, top directories, largest files |
-| [`find_patterns`](#find_patterns) | SQLite | Yes | `repository`, `pattern` | Lines matching a literal string or regular expression |
-| [`find_references`](#find_references) | SQLite | Yes | `repository`, `name` | A name's definitions, then its whole-word uses with the enclosing function or class |
-| [`add_repository`](#add_repository) | Git host, SQLite | No | `url` | The new repository's ID and status; indexing continues in the background |
+| [`get_file`](#get_file) | Database | Yes | `repository`, `path` | A file with line numbers, at most 400 lines per call |
+| [`list_definitions`](#list_definitions) | Database | Yes | `repository` | Entities ordered by file and line |
+| [`analyze_repository`](#analyze_repository) | Database | Yes | `repository` | Counts, languages, top directories, largest files |
+| [`find_patterns`](#find_patterns) | Database | Yes | `repository`, `pattern` | Lines matching a literal string or regular expression |
+| [`find_references`](#find_references) | Database | Yes | `repository`, `name` | A name's definitions, then its whole-word uses with the enclosing function or class |
+| [`add_repository`](#add_repository) | Git host, database | No | `url` | The new repository's ID and status; indexing continues in the background |
 
 Every tool call counts toward the rate limit of 30 per minute per client address. See [Configuration](/docs/reference/configuration/#rate-limits).
 
@@ -80,7 +80,7 @@ None. The schema is `{"type": "object", "properties": {}, "additionalProperties"
 | `repositories[].commit_sha` | string or null | The commit the index was built from. Source links point at it. `null` until a run has listed the files, or for a repository indexed before commits were recorded |
 | `repositories[].status` | string | `pending`, `processing`, `completed` or `failed` |
 | `repositories[].total_files` | integer | Files selected for the last run |
-| `repositories[].total_entities` | integer | Entities stored in SQLite |
+| `repositories[].total_entities` | integer | Entities stored, from each file's newest row only (during a run the previous run's rows are still there) |
 | `repositories[].error_message` | string or null | Why the last run failed, or what a completed run left out |
 | `repositories[].processed_at` | string or null | ISO 8601 time the last run finished, in UTC with a `+00:00` offset |
 
@@ -148,7 +148,7 @@ Full-text search over the Algolia index of functions, classes (including interfa
 - Without `entity_type`, the filter `NOT entity_type:"import"` is added, so import lines don't crowd out the definitions. Pass `entity_type: "import"` to search imports.
 - Part of a camelCase name matches: `WithState` finds `TestShallowWithState`.
 - On a relevance tie, source files rank before test files, then `rank_weight` decides the order: classes, then functions and Terraform blocks, then doc sections, then imports. See [Algolia record fields](/docs/reference/languages/#algolia-record-fields).
-- With no `repository`, hits can come from repositories that are being reprocessed.
+- With no `repository`, hits can come from repositories that are being reprocessed, from the previous run's records as well as the new run's.
 
 ### Result
 
@@ -159,7 +159,10 @@ Full-text search over the Algolia index of functions, classes (including interfa
 | `total_hits` | integer | Total matches reported by Algolia (`nbHits`) |
 | `page` | integer | The page returned |
 | `pages` | integer | Total pages (`nbPages`) |
+| `mode` | string | `semantic`, only in a search by meaning |
 | `results` | array | Hits for this page |
+| `results[].repository_id` | integer | ID of the repository the hit is in |
+| `results[].repository` | string or null | Name of that repository. A search across all repositories mixes several |
 | `results[].entity_name` | string | Bare name, for example `parse_repository_url` |
 | `results[].entity_type` | string | One of the five entity types |
 | `results[].file_path` | string | Path inside the repository |
@@ -169,6 +172,7 @@ Full-text search over the Algolia index of functions, classes (including interfa
 | `results[].snippet` | string | Signature plus body, cut at 600 characters |
 | `results[].description` | string or null | For example `Python function: GitSource._read_tree`, cut at 300 characters; `null` when empty |
 | `results[].url` | string or null | Source link at the exact lines, or `null` when the host has no known link format |
+| `results[].score` | number | Only in a search by meaning: the cosine similarity to the query, rounded to 4 places. Higher is closer |
 
 Source link formats:
 
@@ -181,7 +185,7 @@ Source link formats:
 
 `<ref>` is the commit the index was built from (`commit_sha` in `list_repositories`), so the line numbers stay right after the branch moves on. A repository indexed before commits were recorded uses its branch, or `HEAD` when it has none, until it is reprocessed. Path segments are percent-encoded.
 
-Real output for `query: "createStoreImpl"`, `repository: "pmndrs/zustand"` and `limit: 2`, from a repository indexed before commits were recorded (hence `HEAD` in the links). The `snippet` strings are trimmed here with `…`:
+Output for `query: "createStoreImpl"`, `repository: "pmndrs/zustand"` and `limit: 2`, from a repository indexed before commits were recorded (hence `HEAD` in the links). The `snippet` strings are trimmed here with `…`, and `repository_id` depends on your database:
 
 ```json title="Result"
 {
@@ -192,6 +196,8 @@ Real output for `query: "createStoreImpl"`, `repository: "pmndrs/zustand"` and `
   "pages": 3,
   "results": [
     {
+      "repository_id": 1,
+      "repository": "pmndrs/zustand",
       "entity_name": "createStoreImpl",
       "entity_type": "function",
       "file_path": "src/vanilla.ts",
@@ -204,6 +210,8 @@ Real output for `query: "createStoreImpl"`, `repository: "pmndrs/zustand"` and `
       "url": "https://github.com/pmndrs/zustand/blob/HEAD/src/vanilla.ts#L60-L97"
     },
     {
+      "repository_id": 1,
+      "repository": "pmndrs/zustand",
       "entity_name": "setState",
       "entity_type": "function",
       "file_path": "src/vanilla.ts",
@@ -225,6 +233,7 @@ After a reprocess, each `url` has the indexed commit's SHA where this one has `H
 
 - `query` is at most 512 bytes of UTF-8, because Algolia rejects longer queries.
 - `limit` is capped at 50 per page. Use `page` for more.
+- A keyword search pages through the first 1,000 hits only, because Algolia returns no hits past them. A search by meaning has no such cap.
 - Snippets are cut at 600 characters, and signatures and descriptions at 300.
 - The index stores at most 2,000 characters of each entity's body, so a snippet never shows more than that.
 
@@ -236,6 +245,9 @@ After a reprocess, each `url` has the indexed commit's SHA where this one has `H
 | `Invalid arguments for 'search_code': ...` ending in `query is too long; the limit is 512 bytes` | `query` is over 512 bytes of UTF-8 |
 | `Search is not configured on the server (ALGOLIA_APP_ID / ALGOLIA_ADMIN_API_KEY are missing).` | The backend has no Algolia credentials |
 | `Search is unavailable; try again later.` | Algolia rejected the query or could not be reached. The detail is logged on the backend only, because it can name the Algolia host or app ID |
+| `Search returns only the first 1000 hits; narrow the query, or use list_definitions to list everything` | A keyword search asked for a page that starts at hit 1,000 or later (`page * limit >= 1000`) |
+| `Semantic search needs an embeddings key on the server (EMBEDDING_API_KEY); use mode 'keyword'.` | `mode` is `semantic` and the backend has no `EMBEDDING_API_KEY` |
+| `Semantic search is unavailable: <reason>` | The embeddings provider failed to embed the query. The reason gives the HTTP status, never the provider's text |
 
 ### Example prompt
 
@@ -243,7 +255,7 @@ After a reprocess, each `url` has the indexed commit's SHA where this one has `H
 
 ## `get_file`
 
-Reads one stored file with line numbers. The text comes from SQLite, so it matches what was indexed, not the live branch.
+Reads one stored file with line numbers. The text comes from the database, so it matches what was indexed, not the live branch.
 
 ### Arguments
 
@@ -303,7 +315,7 @@ Real output for `repository: "pmndrs/zustand"`, `path: "src/vanilla.ts"`, `start
 
 ## `list_definitions`
 
-Lists stored entities for one repository, ordered by file path, then start line, then ID. It reads SQLite, so it is exact and unranked.
+Lists stored entities for one repository, ordered by file path, then start line, then ID. It reads the database, so it is exact and unranked.
 
 ### Arguments
 
@@ -623,7 +635,7 @@ Adds a repository by `https` URL and starts indexing it in the background. It wo
 | Argument | Type | Required | Default | Constraints |
 | --- | --- | --- | --- | --- |
 | `url` | string | Yes | none | `minLength` 1. An `https` repository URL. `http://` and `git@host:path` forms are rewritten to `https://`. A branch URL such as `.../tree/dev`, `.../-/tree/dev` or Bitbucket's `.../src/dev` is understood |
-| `branch` | string or null | No | default branch | At most 100 characters. Must not contain a `..` path segment or a NUL, and must not start with `-`. An explicit value wins over a branch in the URL |
+| `branch` | string or null | No | default branch | At most 100 characters. Must follow git's branch-name rules (`git check-ref-format`) and must not start with `-`. An explicit value wins over a branch in the URL |
 | `description` | string or null | No | none | Free text note |
 
 The URL is refused if it has a port, credentials, a query or fragment, the host `localhost` (or `*.localhost`), or a private or loopback IP address. A path that is not `owner/repo` (plus a recognised branch suffix) is refused as well. On hosts other than github.com, the host name is also resolved before git runs: if it doesn't resolve, or any address it resolves to is not public, the repository is refused, and git then connects only to the address that was checked.
@@ -654,14 +666,14 @@ Indexing runs after the tool returns. Poll `list_repositories` until the status 
 
 ### Limits
 
-The pre-flight check takes up to 10 seconds. A later clone on a non-GitHub host takes up to 120 seconds. Indexing keeps at most 1,000 files and 100 MB, and skips files of 1 MB or more. See [Indexing pipeline](/docs/concepts/indexing-pipeline/).
+The pre-flight check allows 10 seconds per request. On GitHub it makes up to two requests, so it can take about 20 seconds. A later clone on a non-GitHub host takes up to 120 seconds. Indexing keeps at most 1,000 files and 100 MB, and skips files of 1 MB or more. See [Indexing pipeline](/docs/concepts/indexing-pipeline/).
 
 ### Errors
 
 | Message | Cause |
 | --- | --- |
 | `url: <reason>` | The URL failed validation, for example `Invalid repository URL (only https is supported): ...` |
-| `branch: Invalid branch name` | The branch contains `..`, a NUL, or starts with `-` |
+| `branch: Invalid branch name` | The branch breaks git's branch-name rules (for example it contains `..`, a space or `~`), or starts with `-` |
 | `octo/demo is already added as repository 1.` | The URL (case-insensitive) already exists |
 | `Search indexing is not configured on the server (Algolia credentials are missing).` | `ALGOLIA_APP_ID` or `ALGOLIA_ADMIN_API_KEY` is unset |
 | `<host>/<path> was not found or is private; only public repositories are supported on <host>.` | Non-GitHub host: the repository is missing or needs credentials |

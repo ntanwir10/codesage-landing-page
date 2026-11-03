@@ -3,7 +3,7 @@ title: Supported languages
 description: Which files CodeSage indexes, how each language is parsed, how entities are named, what is skipped, and the fields of each Algolia record.
 ---
 
-CodeSage selects files by extension, parses each one into entities (functions, classes, imports, documentation sections and Terraform blocks), stores the file and its entities in SQLite, and indexes the entities in Algolia. This page lists exactly what that means for each language. The code is in [`github_service.py`](https://github.com/ntanwir10/codesage-algolia-challenge/blob/master/backend/app/services/github_service.py) (file selection), [`code_parser.py`](https://github.com/ntanwir10/codesage-algolia-challenge/blob/master/backend/app/services/code_parser.py) (parsing) and [`algolia_service.py`](https://github.com/ntanwir10/codesage-algolia-challenge/blob/master/backend/app/services/algolia_service.py) (records). For the run as a whole, see [Indexing pipeline](/docs/concepts/indexing-pipeline/).
+CodeSage selects files by extension, parses each one into entities (functions, classes, imports, documentation sections and Terraform blocks), stores the file and its entities in the database, and indexes the entities in Algolia. This page lists exactly what that means for each language. The code is in [`github_service.py`](https://github.com/ntanwir10/codesage-algolia-challenge/blob/master/backend/app/services/github_service.py) (file selection), [`code_parser.py`](https://github.com/ntanwir10/codesage-algolia-challenge/blob/master/backend/app/services/code_parser.py) (parsing) and [`algolia_service.py`](https://github.com/ntanwir10/codesage-algolia-challenge/blob/master/backend/app/services/algolia_service.py) (records). For the run as a whole, see [Indexing pipeline](/docs/concepts/indexing-pipeline/).
 
 ## Extensions and parsers
 
@@ -44,7 +44,7 @@ The README lists only CSS, HTML, JSON, YAML and XML as stored-without-entities. 
 These files are stored and readable through [`get_file`](/docs/reference/mcp-tools/#get_file) and found by [`find_patterns`](/docs/reference/mcp-tools/#find_patterns), but they produce no Algolia records and so never appear in [`search_code`](/docs/reference/mcp-tools/#search_code) or [`list_definitions`](/docs/reference/mcp-tools/#list_definitions):
 
 - Files in `html`, `css`, `scss`, `sql`, `json`, `yaml` and `xml`.
-- Files that are empty or contain only whitespace.
+- Files that contain only whitespace. Empty files are skipped at download and never stored.
 - Files whose parser raised an error. The file is still stored, and the run's `error_message` ends with `N files could not be parsed` under `Partially indexed:`.
 - Source files that simply define nothing, such as a Python file with only constants.
 
@@ -170,8 +170,9 @@ Each entity becomes one Algolia record. The index name is `ALGOLIA_INDEX_NAME`.
 
 | Field | Type | Content |
 | --- | --- | --- |
-| `objectID` | string | `<repository_id>_<sha1 of "path:type:name:line_start">`. Stable, so re-indexing overwrites instead of duplicating |
+| `objectID` | string | `<repository_id>_<sha1 of "run_id:path:type:name:line_start">`. New for each run, so a reprocess never overwrites the previous run's records |
 | `repository_id` | integer | The owning repository |
+| `run_id` | string | The run that wrote the record. When a run completes, records with another `run_id` are deleted |
 | `file_path` | string | Path inside the repository |
 | `entity_type` | string | `function`, `class`, `import`, `doc_section` or `terraform_block` |
 | `entity_name` | string | Name, cut at 500 characters |
@@ -215,7 +216,7 @@ After `is_test`, a higher weight ranks first (`customRanking: desc(rank_weight)`
 | Setting | Value |
 | --- | --- |
 | `searchableAttributes` | `entity_name`, `description`, `content`, `parameters`, `file_path` (in this order) |
-| `attributesForFaceting` | `filterOnly(repository_id)`, `entity_type`, `language`, `file_path` |
+| `attributesForFaceting` | `filterOnly(repository_id)`, `filterOnly(run_id)`, `entity_type`, `language`, `file_path` |
 | `camelCaseAttributes` | `entity_name`, so part of a camelCase name matches |
 | `customRanking` | `asc(is_test)`, `desc(rank_weight)` |
 | `highlightPreTag`, `highlightPostTag` | `<mark>`, `</mark>` |

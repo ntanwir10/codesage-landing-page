@@ -1,16 +1,16 @@
 ---
 title: Data model
-description: The three SQLite tables CodeSage stores, every column, how deletes cascade, how migrations run and how the connection is configured.
+description: The four tables CodeSage stores, every column, how deletes cascade, how migrations run and how the connection is configured.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 import Mermaid from '~/components/Mermaid.astro';
 
-SQLite holds three things: the repositories you added, the full text of every indexed file, and the entities parsed from those files. Algolia holds a searchable copy of the entities, but not the files. Every tool that needs exact content (`get_file`, `list_definitions`, `analyze_repository`, `find_patterns`) reads SQLite.
+The database (SQLite by default, or Postgres) holds four things: the repositories you added, the full text of every indexed file, the entities parsed from those files with their semantic search vectors, and the queue of indexing jobs for external workers. Algolia holds a searchable copy of the entities, but not the files. Every tool that needs exact content (`get_file`, `list_definitions`, `analyze_repository`, `find_patterns`) reads the database.
 
 The models are in [`backend/app/models/`](https://github.com/ntanwir10/codesage-algolia-challenge/tree/master/backend/app/models). The schema history is in [`backend/alembic/versions/`](https://github.com/ntanwir10/codesage-algolia-challenge/tree/master/backend/alembic/versions).
 
-<Mermaid caption="The three tables. code_entities points at both its file and its repository, so counting entities per repository needs no join." code={`erDiagram
+<Mermaid caption="The four tables. code_entities points at both its file and its repository, so counting entities per repository needs no join. jobs names a repository but has no foreign key." code={`erDiagram
     repositories ||--o{ code_files : has
     code_files ||--o{ code_entities : has
     repositories ||--o{ code_entities : "repository_id"
@@ -46,12 +46,22 @@ The models are in [`backend/app/models/`](https://github.com/ntanwir10/codesage-
         text signature
         text docstring
         json entity_metadata
+        blob embedding
+        string embedding_model
+    }
+    jobs {
+        int id PK
+        int repository_id
+        bool force_reprocess
+        bool incremental
+        string claimed_by
+        datetime heartbeat_at
     }
 `} />
 
 ## Tables and columns
 
-Column sizes are the SQLAlchemy `String` lengths. SQLite does not enforce them, so they are limits the application keeps, not limits the database checks.
+Column sizes are the SQLAlchemy `String` lengths. SQLite does not enforce them, so on SQLite they are limits the application keeps. Postgres enforces them.
 
 ### `repositories`
 
@@ -115,10 +125,26 @@ One row per function, class, import, doc section or Terraform block.
 | `signature` | text | yes | The definition line, such as `def refresh_token(session, token: str) -> str:` |
 | `docstring` | text | yes | The parser's description (the docstring's first line where there is one) |
 | `entity_metadata` | JSON | yes | `{"parameters": [...], "return_type": ...}` |
+| `embedding` | binary | yes | The definition's vector for search by meaning: unit-length float32 values. `null` for imports, and when no `EMBEDDING_API_KEY` is set or the embeddings call failed |
+| `embedding_model` | string(200) | yes | The `EMBEDDING_MODEL` that made the vector. Only vectors from the current model are compared, so after a model change a run embeds again |
 | `created_at` | datetime | yes | Set on insert |
 | `updated_at` | datetime | yes | Set on update |
 
-`repository_id` is stored on the entity as well as on its file. That duplication lets `list_repositories` count entities per repository with one `GROUP BY` on a single table.
+`repository_id` is stored on the entity as well as on its file. That duplication lets `list_repositories` count entities per repository with one `GROUP BY` on a single table. The count only takes entities of each path's newest file row, because until a run completes the repository also holds the previous run's rows.
+
+### `jobs`
+
+One row per queued or running indexing run, used only with `INDEX_WORKERS=external`. In the default inline mode the table stays empty.
+
+| Column | Type | Null | Notes |
+| --- | --- | --- | --- |
+| `id` | integer, primary key | no | Workers claim the oldest queued job first |
+| `repository_id` | integer | no | Indexed. No foreign key |
+| `force_reprocess` | boolean | no | The run replaces a completed index |
+| `incremental` | boolean | no | The run reuses unchanged files |
+| `claimed_by` | string(200) | yes | The worker's `host:pid`. `null` means queued |
+| `heartbeat_at` | datetime with time zone | yes | The worker's last sign of life. A job silent for 5 minutes is queued again, as a full run |
+| `created_at` | datetime with time zone | yes | Set by the database on insert |
 
 ## Relationships
 
@@ -135,9 +161,9 @@ The ORM cascades, but the foreign keys in the database carry no `ON DELETE` clau
 
 The bulk deletes run in a worker thread, because a large repository has thousands of rows. When the final ORM delete runs, the cascade finds no children to load.
 
-If Algolia refuses the removal, nothing is deleted from SQLite and the API returns `502`. That ordering is deliberate: it is better to keep a repository whose records still exist than to leave orphaned records in Algolia.
+If Algolia refuses the removal, nothing is deleted from the database and the API returns `502`. That ordering is deliberate: it is better to keep a repository whose records still exist than to leave orphaned records in Algolia.
 
-A reprocess uses the same two bulk deletes (steps 2 and 3) after a successful fetch, but it waits for the Algolia delete to finish first. See [the indexing pipeline](/docs/concepts/indexing-pipeline/#the-11-steps).
+A reprocess deletes nothing first. It writes its rows next to the previous run's, so the old index stays readable. When the run completes, it deletes the previous run's rows with the same two bulk deletes, limited to the rows that existed before it started, and sends the Algolia delete of the previous run's records without awaiting it. A failed run deletes its own rows and records instead. See [the indexing pipeline](/docs/concepts/indexing-pipeline/#the-11-steps).
 
 ## Connection settings
 
@@ -164,8 +190,9 @@ SQLite allows one writer at a time. That is one of the reasons the backend runs 
 | --- | --- | --- |
 | Local | `sqlite:///./codesage.db` (default) | `backend/codesage.db`, plus `-wal` and `-shm` files while it runs |
 | Docker dev and prod | `sqlite:///./data/codesage.db` (set in the Compose file) | `/app/data/codesage.db` in a named volume |
+| Postgres | `postgresql://user:password@host/db` (or `postgres://`) | None. CodeSage connects with psycopg 3, which it installs |
 
-`make db-reset` deletes the local file and its `-journal`, `-wal` and `-shm` companions. It does not touch Docker volumes. Only SQLite is supported.
+`make db-reset` deletes the local file and its `-journal`, `-wal` and `-shm` companions. It does not touch Docker volumes or Postgres.
 
 ## Migrations
 
@@ -177,11 +204,13 @@ Alembic migrations run at every start-up through `app/core/migrations.py`, so yo
 | `cleanup` | `baseline` | Drops `sessions` and `search_indexes` (with `DROP TABLE IF EXISTS`, since a stamped database may never have had them). Removes duplicate repository URLs, keeping the row with the highest `id` and deleting the duplicates' entities and files first. Adds the unique constraint `uq_repositories_url` |
 | `drop_unused_columns` | `cleanup` | Drops the indexes on `full_name` and `file_name`, then drops these columns. On `code_entities`: `full_name`, `start_column`, `end_column`, `complexity_score`, `is_public`, `is_async`. On `code_files`: `file_name`, `is_analyzed`, `size_bytes`. On `repositories`: `repo_metadata`, `security_score`, `vulnerability_count` |
 | `commit_sha` | `drop_unused_columns` | Adds the nullable `repositories.commit_sha` column (string(64)). Existing repositories get `null` until they are reprocessed |
+| `entity_embeddings` | `commit_sha` | Adds the nullable `code_entities.embedding` (binary) and `embedding_model` (string(200)) columns |
+| `jobs` | `entity_embeddings` | Creates the `jobs` table and its `repository_id` index |
 
 Notes on how they are written:
 
 - **Batch mode.** SQLite cannot drop a column or add a constraint in place, so the migrations use Alembic's batch mode, which rebuilds the table. `alembic/env.py` also sets `render_as_batch=True` so autogenerated migrations use it from the start.
-- **Downgrades exist.** `cleanup`, `drop_unused_columns` and `commit_sha` can go back. A downgrade of `cleanup` recreates the two dropped tables, but not their rows.
+- **Downgrades exist.** Every revision after `baseline` can go back. A downgrade of `cleanup` recreates the two dropped tables, but not their rows.
 - **Types are compared.** The Alembic environment sets `compare_type=True`, so autogenerate notices column type changes.
 - **Database URL.** `env.py` reads `sqlalchemy.url` from the programmatic config, falling back to `DATABASE_URL`.
 
@@ -189,7 +218,7 @@ To add a migration, see [Development](/docs/development/#add-a-database-migratio
 
 ### Pre-Alembic databases
 
-Earlier versions created tables straight from the models. If the app tables exist but there is no `alembic_version` table, `upgrade_database` stamps the database at `baseline`, then upgrades to the latest revision. Stamping records the revision without running it, so the existing tables are kept and only the later revisions (`cleanup`, `drop_unused_columns` and `commit_sha`) actually change them. That is why `cleanup` uses `IF EXISTS`.
+Earlier versions created tables straight from the models. If the app tables exist but there is no `alembic_version` table, `upgrade_database` stamps the database at `baseline`, then upgrades to the latest revision. Stamping records the revision without running it, so the existing tables are kept and only the later revisions (`cleanup`, `drop_unused_columns`, `commit_sha`, `entity_embeddings` and `jobs`) actually change them. That is why `cleanup` uses `IF EXISTS`.
 
 ### In-memory SQLite
 

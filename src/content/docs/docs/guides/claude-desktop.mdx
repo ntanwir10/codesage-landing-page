@@ -13,7 +13,7 @@ Claude Desktop, Cursor, VS Code, Windsurf and other MCP clients talk to CodeSage
     participant Claude as MCP client
     participant Bridge as MCP bridge
     participant API as Backend
-    participant Data as Algolia or SQLite
+    participant Data as Algolia or the database
     You->>Claude: ask a question
     Claude->>Bridge: tools/call
     Bridge->>API: POST /ai/mcp/tools/call
@@ -238,7 +238,7 @@ The assistant calls `list_repositories` with no arguments. It gets each reposito
 
 > Search the zustand repository for where the store is created.
 
-The assistant calls `search_code` with something like `{"query": "create store", "repository": "pmndrs/zustand", "limit": 10}`. Each hit has the entity name and type, file path, line range, language, signature, a snippet and a source link to the exact lines. Optional arguments are `language`, `entity_type` (`function`, `class`, `import`, `doc_section` or `terraform_block`), `limit` (1 to 50) and `page` (zero-based). Imports are searched only when `entity_type` is `import`. The query is at most 512 bytes. A question in plain words works.
+The assistant calls `search_code` with something like `{"query": "create store", "repository": "pmndrs/zustand", "limit": 10}`. Each hit has the entity name and type, file path, line range, language, signature, a snippet and a source link to the exact lines. Optional arguments are `language`, `entity_type` (`function`, `class`, `import`, `doc_section` or `terraform_block`), `limit` (1 to 50), `page` (zero-based) and `mode` (`keyword`, the default, or `semantic` to rank by meaning when the server has `EMBEDDING_API_KEY`). Imports are searched only when `entity_type` is `import`. The query is at most 512 bytes. A question in plain words works.
 
 ### `get_file`
 
@@ -285,7 +285,7 @@ A failure reaches the assistant as a tool error with a message that says what to
 | Backend not running (loopback) | `` CodeSage backend not reachable at http://127.0.0.1:8001; start it with `make start-backend` `` |
 | Backend not running (remote) | `CodeSage backend not reachable at <url>; check MCP_SERVER_URL and that the host is up` |
 | Key rejected (401) | `CodeSage backend rejected the API key (401); check CODESAGE_API_KEY in the MCP server config` |
-| No key configured | ``No API key is configured; set CODESAGE_API_KEY in the MCP server's env in your MCP client's config (for Claude Desktop, run `make install-claude`).`` For a local backend this means `backend/.env` has no key either |
+| No key configured | ``No API key is configured; set CODESAGE_API_KEY in the MCP server's env in your MCP client's config (run `make install-claude`, or install-cursor, install-vscode or install-windsurf).`` For a local backend this means `backend/.env` has no key either |
 | Proxy login rejected | `The proxy in front of CodeSage rejected the login (401); check the user and password (CODESAGE_BASIC_AUTH_USER and its Keychain entry)` |
 | Host refused (403) | `CodeSage refused the request (403): <detail>. If the backend runs on another host, add that host to ALLOWED_HOSTS on the backend and check MCP_SERVER_URL.` |
 | Wrong URL (404) | `The backend returned 404 for <path>; check that MCP_SERVER_URL points at the backend root (no /api/v1).` |

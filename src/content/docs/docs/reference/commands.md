@@ -32,7 +32,7 @@ The Makefile defines two variables used by the Docker targets:
 3. Install `backend/requirements-dev.txt` with `uv pip install`, or `pip install` without `uv`.
 4. Check that Node.js is version 22 or newer. It stops with `Node.js 22 or newer is required` otherwise.
 5. Run `npm ci` in `frontend/`.
-6. Run `.venv/bin/python scripts/ensure_api_key.py`, which generates `CODESAGE_API_KEY` in `backend/.env` if it is missing or empty and copies it to `frontend/.env` as `VITE_CODESAGE_API_KEY`. A key that already exists is never changed. The script never prints the key.
+6. Run `.venv/bin/python scripts/ensure_api_key.py`, which generates `CODESAGE_API_KEY` in `backend/.env` if it is missing, empty or still a `your-...-here` placeholder, and copies it to `frontend/.env` as `VITE_CODESAGE_API_KEY`. Any other key is never changed. The script never prints the key.
 7. Print which values to put in `backend/.env`.
 
 `make start` runs these steps:
@@ -149,7 +149,7 @@ make install-claude ARGS="--server-url https://your-host --basic-auth alice"
 python scripts/install_claude_desktop.py --config ./test-config.json --dry-run
 ```
 
-The key helper `scripts/ensure_api_key.py` takes no options by default. It reads `backend/.env`, writes a key only when `CODESAGE_API_KEY` is missing or empty, and keeps `VITE_CODESAGE_API_KEY` in `frontend/.env` equal to it. Both files end up at mode 600.
+The key helper `scripts/ensure_api_key.py` takes no options by default. It reads `backend/.env`, writes a key only when `CODESAGE_API_KEY` is missing, empty or a `your-...-here` placeholder (replacing the placeholder line), and keeps `VITE_CODESAGE_API_KEY` in `frontend/.env` equal to it. Both files end up at mode 600.
 
 ## Frontend scripts
 

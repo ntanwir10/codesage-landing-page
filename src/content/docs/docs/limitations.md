@@ -17,7 +17,7 @@ These are limits of the current code, not bugs waiting for a fix. Each row says 
 | **Rate limits are per client address and in memory.** They reset on restart. | slowapi default storage, with no shared store | Everything behind one address shares one count. 30 per minute applies to tool calls |
 | **Dev and prod stacks cannot run together.** | Both publish port 80 | Stop one before starting the other |
 | **Dev hot reload restarts a running index.** | `--reload` restarts the process, and start-up runs interrupted jobs again in full | Avoid saving files during a run, or use external workers |
-| **Semantic search needs your own embeddings key, and ranks by brute force.** Repositories indexed before the key was set have no vectors until they're reprocessed. | Vectors come from your provider, and cosine similarity is computed in Python, which is fine for thousands of definitions | Reprocess after setting the key. Use keyword search for very large repositories |
+| **Semantic search needs your own embeddings key, and ranks by brute force.** Repositories indexed before the key was set have no vectors until they're reprocessed. | Vectors come from your provider. Each query loads every stored vector into one numpy matrix and scores them with a single matrix product, with no vector index | Reprocess after setting the key. Use keyword search for very large repositories |
 | **Each semantic suggestion in the dashboard is one embeddings call.** | Suggestions by meaning embed what you've typed, after a 500 ms pause | Switch the dashboard to Keyword if your provider charges per call |
 | **Incremental runs still download every file**, and keep unchanged files' entities as an earlier parser produced them. | Changes are found by comparing content after the download | Use a full Reprocess after upgrading CodeSage |
 
@@ -33,8 +33,8 @@ These are limits of the current code, not bugs waiting for a fix. Each row says 
 | **Skipped without notice:** `node_modules`, `dist`, `build`, `vendor`, `third_party`, `.git`, `__pycache__`, `.next`, `coverage`, minified files, source maps and lockfiles. | They are generated or third-party code | Only cap overflow is reported in the `Partially indexed` note |
 | **Empty files and files with a NUL byte are skipped.** | They are treated as binary | None |
 | **Symlinks are never listed or followed.** Submodules are not fetched. | Safety, and the trees API lists blobs only | Add the submodule's repository separately |
-| **One branch per repository, and a URL can be added once.** | The URL is stored without the branch and is unique, so the same repository on two branches is a duplicate (`409`) | Change the branch with the update endpoint when no run is active, then reprocess. That replaces the index |
-| **Entity bodies are cut.** A parsed body keeps 60 lines and 2000 characters. `content` in Algolia keeps 2000 characters of body, and a record is trimmed to 9000 bytes. | Algolia rejects batches with a record over 10 KB | Use `get_file` for the full text. SQLite keeps the whole file |
+| **One branch per repository, and a URL can be added once.** | The URL is stored without the branch and is unique, so the same repository on two branches is a duplicate (`409`) | Change the branch with the update endpoint when no run is active. A completed or failed repository then re-indexes from the new branch by itself, and the old index stays in place until that run completes (searches that name the repository wait for it) |
+| **Entity bodies are cut.** A parsed body keeps 60 lines and 2000 characters. `content` in Algolia keeps 2000 characters of body, and a record is trimmed to 9000 bytes. | Algolia rejects batches with a record over 10 KB | Use `get_file` for the full text. The database keeps the whole file |
 | **Markdown sections use ATX headings only** (`#` to `######`). | The heading scanner matches ATX syntax | Use ATX headings |
 | **Python files `ast` cannot parse use a line scanner.** | Python 2 sources, templates and very deep nesting fail `ast` | None needed. They are still indexed |
 | **Framework detection is best effort.** It reads `package.json` and Python imports only. | A guess from two sources | Set the framework with the update endpoint if it matters |
@@ -66,11 +66,11 @@ These are limits of the current code, not bugs waiting for a fix. Each row says 
 | Limitation | Why | Workaround |
 | --- | --- | --- |
 | **Searching all repositories includes ones being reprocessed.** | A named repository must be `completed`, but a search without a name only filters on the query | Name the repository |
-| **A reprocess briefly leaves a repository with no records.** | The old records are deleted before the new ones are indexed | Wait for `completed` |
+| **During a reprocess, a search across all repositories can return both old and new records.** | A run writes its records under a new `run_id` and deletes the previous run's only when it completes | Name the repository, or wait for `completed` |
 | **Ranking is relevance first.** `is_test` and `rank_weight` only break ties. | They are the index's `customRanking` | See [Search](/docs/concepts/search/#ranking) |
 | **Plain-words queries are English.** `queryLanguages` is `["en"]`. | Stop-word and plural rules are English | Use keywords in other languages |
 | **Delete returns before Algolia finishes.** | Algolia applies tasks in order, so a later re-add still lands after the delete | None needed |
-| **Suggestions need at least 2 characters** and return nothing on any error. | A broken suggestion box should not break the page | Use search |
+| **Suggestions need at least 2 characters, one of them a letter or digit,** and return nothing on any error. | A broken suggestion box should not break the page | Use search |
 | **A synchronous Algolia client.** Calls run in worker threads. | CodeSage uses the v4 client's synchronous `SearchClientSync` | None |
 
 ## MCP tools and the bridge

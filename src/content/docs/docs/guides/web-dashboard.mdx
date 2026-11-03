@@ -12,7 +12,7 @@ import completeShot from '~/assets/screenshots/repository-complete.png';
 import searchShot from '~/assets/screenshots/repository-search.png';
 import dashboardShot from '~/assets/screenshots/dashboard.png';
 
-The dashboard is a React app served by Vite at http://localhost:5173 (or by nginx in the Docker stacks). It has four pages and a 404 page. This guide covers each one, the text you see and what happens behind it.
+The dashboard is a React app served by Vite at http://localhost:5173 (or by nginx in the Docker stacks). It has five pages and a 404 page. This guide covers each one, the text you see and what happens behind it.
 
 <Mermaid caption="How you move through the dashboard." code={`flowchart TB
     home["Home<br/>enter owner/repo or a URL"] --> page["Repository page<br/>live progress"]
@@ -27,7 +27,7 @@ The dashboard is a React app served by Vite at http://localhost:5173 (or by ngin
     browse --> viewer
     search --> github["source ↗ opens the result<br/>at the indexed commit on its host"]`} />
 
-The header shows the CodeSage name and two links, **Home** and **Dashboard**. The browser tab title follows the page: `CodeSage - AI-Powered Code Discovery`, `CodeSage - Dashboard`, `CodeSage - Repository <id>` and `CodeSage - File in repository <id>`.
+The header shows the CodeSage name and three links, **Home**, **Dashboard** and **Search**. The browser tab title follows the page: `CodeSage - AI-Powered Code Discovery`, `CodeSage - Dashboard`, `CodeSage - Search`, `CodeSage - <name>` on a repository page and `CodeSage - File in repository <id>`.
 
 ## Pages at a glance
 
@@ -37,6 +37,7 @@ The header shows the CodeSage name and two links, **Home** and **Dashboard**. Th
 | Repository | `/repository/:id` | Watch progress, search, browse definitions, reprocess, delete |
 | File viewer | `/repository/:id/file?path=…&line=…&end=…` | Read an indexed file with the target lines highlighted |
 | Dashboard | `/dashboard` | See all repositories and delete one |
+| Search | `/search` | Search every indexed repository at once |
 | Not found | any other path | "Page not found", with a **Go home** button |
 
 ## Home
@@ -64,29 +65,30 @@ How the repository field reads what you type:
 - A valid value shows `Repository: owner/repo` for GitHub, or `Repository: <host>/<path>` for another host, under the field.
 - Empty Branch and Description fields are not sent.
 
-Press **Add Repository**. While the server checks the repository the button reads `Checking repository…`. The server checks the repository and branch, on GitHub's API or with `git ls-remote` for other hosts, for up to 10 seconds, with one attempt and no retries, before it creates anything. On success you see a green toast, `Repository added` with `Processing has started. Progress appears on this page.`, and land on the repository page. The repository exists with status `pending` and moves to `processing` almost at once.
+Press **Add Repository**. While the server checks the repository the button reads `Checking repository…`. The server checks the repository and branch, on GitHub's API or with `git ls-remote` for other hosts, with one attempt, no retries and 10 seconds per request (GitHub takes two requests, so about 20 seconds at worst), before it creates anything. On success you see a green toast, `Repository added` with `Processing has started. Progress appears on this page.`, and land on the repository page. The repository exists with status `pending` and moves to `processing` almost at once.
 
 ### When the server refuses a repository
 
-Every refusal appears in red under the repository field. The page stays on Home, nothing is created and your input is kept. Editing the field clears the message. Only a success shows a toast.
+Every refusal appears in red under the repository field, except branch problems, which appear under the **Branch** field. The page stays on Home, nothing is created and your input is kept. Editing the field clears the message. Only a success shows a toast.
 
 | You see | Status | Cause |
 | --- | --- | --- |
 | `Enter owner/repo for GitHub, or a repository's https URL` | none (checked in the browser) | The text is neither `owner/repo` nor a repository URL. No request is sent. |
-| `Invalid branch name` | 422 | The branch contains a `..` segment, a NUL character, or starts with `-`. |
-| `String should have at most 100 characters` | 422 | The branch is longer than 100 characters. |
+| `Invalid branch name` (under Branch) | 422 | The branch breaks git's branch-name rules (for example it has a space, `..`, `~` or `:`), or starts with `-`. |
+| `String should have at most 100 characters` (under Branch) | 422 | The branch is longer than 100 characters. |
 | `GitHub repository owner/repo was not found. Check the URL; if it's private, the server's GITHUB_TOKEN needs access.` | 422 | The repository doesn't exist, or it's private and the server's token can't read it. |
 | `GitHub denied access to owner/repo.` | 422 | GitHub answered 403 for the repository or branch. |
-| `Branch 'x' does not exist in owner/repo.` | 422 | The branch is missing. |
+| `Branch 'x' does not exist in owner/repo.` (under Branch) | 422 | The branch is missing. |
 | `owner/repo is empty; there is nothing to index.` | 422 | The repository has no content. |
 | `owner/repo has already been added.` plus an **Open it** link | 409 | The same URL already exists, in any letter case. The link opens the existing repository. |
 | `GitHub's API rate limit was reached; try again in about N minutes.` | 503 | GitHub is rate-limiting the server. The response carries `Retry-After`. |
 | `Search indexing is not configured on the server (Algolia credentials are missing).` | 503 | `ALGOLIA_APP_ID` or `ALGOLIA_ADMIN_API_KEY` is unset. |
 | `GitHub rejected the server's GITHUB_TOKEN; check the token configured on the CodeSage server.` | 502 | The token is invalid. |
 | `Could not reach GitHub; try again.` | 502 | GitHub is down, unreachable, or answered an unexpected status. |
-| `GitHub did not respond in time; try again.` | 504 | GitHub took longer than the 10 s check. |
-| `Invalid or missing API key. Set VITE_CODESAGE_API_KEY to the key the server expects.` | 401 | The key in the bundle doesn't match the backend's. A red `API key rejected` toast also appears. |
-| `Too many requests. Please wait a moment and try again.` | 429 | More than 100 creates per minute from one address. |
+| `GitHub did not respond in time; try again.` | 504 | A GitHub check request took longer than 10 s. |
+| `The server rejected the API key: this app's key doesn't match the server's.` | 401 | The key in the bundle doesn't match the backend's. A red `API key rejected` toast also appears. |
+| `The site's login was refused. Reload the page and sign in again.` | 401 | The production login (nginx's basic auth) refused the request. No `API key rejected` toast. |
+| The server's `Too many requests; try again in N seconds.` | 429 | More than 100 creates per minute from one address. |
 | `Server error (request <id>). Please try again later.` | 500 | An unexpected backend error. The ID matches the backend log. |
 | `Cannot reach the CodeSage server. Check that the backend is running.` | none, or 500 | The browser got no answer, or a proxy answered `500` without the backend's request ID (the Vite dev server does this when the backend isn't running). |
 | `The server took too long to respond. Try again.` | none | No answer within the dashboard's 30 s request timeout. |
@@ -127,9 +129,10 @@ The badge is one of **Pending** (gray), **Processing** (blue), **Completed** (gr
 
 | State | Card | Text |
 | --- | --- | --- |
-| `pending` or `processing` | Blue, "Processing Status" | A progress bar with a percentage and `N / M files`. Until the first batch is stored the bar is indeterminate. A `Live Updates` pill shows while the WebSocket is connected. |
+| `pending` or `processing` | Blue, "Processing Status" | A progress bar with a percentage and the stage with its counts, such as `Parsing and storing files… 200 / 214 files`. The stages are `Queued`, `Fetching files…`, `Parsing and storing files…` and `Indexing in Algolia…`. Until the first batch is stored the bar is indeterminate and shows the stage alone. A `Live Updates` pill shows while the WebSocket is connected. |
 | `completed` | Green | `Repository analysis complete!` and `Your repository is ready for AI-powered search and exploration.` with a **Reprocess** button |
 | `completed` with a note | Amber | `Repository partially indexed` followed by the stored `error_message`, such as `Partially indexed: 12 files over the 1000-file or 100 MB limit were skipped`, with **Reprocess** |
+| `completed` after a failed reprocess | Amber | `Reprocessing failed; the previous index is still searchable` followed by `Reprocessing failed: <reason>. Search still uses the previous index.`, with **Reprocess** |
 | `failed` | Red | `Processing failed`, `There was an error processing this repository. You can try reprocessing it.`, the reason from `error_message`, and **Reprocess** |
 
 <Aside type="note">
@@ -174,7 +177,7 @@ Dashboard searches go through the same `search_code` tool endpoint your MCP clie
 
 ### Browse definitions
 
-Once the repository is `completed`, a **Browse definitions** card under the search lists every indexed definition, read from SQLite through the `list_definitions` tool, in file and line order.
+Once the repository is `completed`, a **Browse definitions** card under the search lists every indexed definition, read from the database through the `list_definitions` tool, in file and line order.
 
 - **Filters.** A name box (placeholder `Filter by name...`) matches any part of the name, ignoring case. It applies 300 ms after you stop typing, because each change is a tool call and those are limited to 30 a minute. A kind select offers `All kinds` and the same kinds as search.
 - **List.** Up to 100 definitions. The line above them reads `Showing N of M definitions` when more match, or `M definitions`. Each entry shows the name, which opens the [file viewer](#file-viewer) at its lines, then `<type> · <path>:<line>`.
@@ -182,7 +185,7 @@ Once the repository is `completed`, a **Browse definitions** card under the sear
 
 ### Reprocess
 
-**Reprocess** appears on the green, amber and red cards. It calls `POST /api/v1/repositories/{id}/process?force_reprocess=true`, which re-fetches the repository, replaces its Algolia records and rows and re-runs indexing. The button reads `Reprocessing...` while the request is in flight. Results:
+**Reprocess** appears on the green, amber and red cards, and as **Reprocess to update** when the branch has moved. It first opens a dialog titled **Reprocess Repository**: `This builds the index again from the branch's latest commit. Search keeps using the current index until the new run completes, and keeps it if the run fails.` The buttons are **Cancel** and **Reprocess**. Confirming calls `POST /api/v1/repositories/{id}/process?force_reprocess=true`, which re-fetches the repository, re-runs indexing and then replaces its Algolia records and rows. The button reads `Reprocessing...` while the request is in flight. Results:
 
 | Toast | When |
 | --- | --- |
@@ -190,7 +193,7 @@ Once the repository is `completed`, a **Browse definitions** card under the sear
 | Yellow `Reprocessing not started` with the server's message | 409, because a job is already running |
 | Red `Failed to start reprocessing` with the message | Any other error, such as 503 when Algolia isn't configured |
 
-A reprocess replaces the old data only after the new files are fetched, so a transient GitHub error doesn't wipe a working index. If the run fails, the repository goes back to `completed` with its previous index and counts, and its message reads `Reprocessing failed: … Search still uses the previous index.`
+A reprocess replaces the old data only after the new run completes, so a failed run doesn't wipe a working index. If the run fails, the repository goes back to `completed` with its previous index and counts, and its message reads `Reprocessing failed: … Search still uses the previous index.`
 
 ### Delete
 
@@ -216,9 +219,13 @@ Error toasts stay for 8 seconds and carry the server's message. A repository can
 
 If a background refresh fails but data is already on screen, the page keeps the old data.
 
+## Search page
+
+`/search` (the **Search** link in the header) searches every indexed repository at once. It is the same search card as on a repository page, with the text `Search every indexed repository at once`, the same filters, suggestions and modes. Each result also names its repository (📦 `owner/repo`), and its name opens the file viewer in that repository. A repository being reprocessed is included, so a hit can come from its previous or its new run. Opening such a hit shows the file viewer's refusal (`is still indexing`) until the run completes. A search by meaning leaves it out until the run completes.
+
 ## File viewer
 
-The file viewer shows one stored file at `/repository/:id/file?path=<path>&line=<n>&end=<m>`. Result names, the **Browse definitions** list and the viewer's own outline all open it. The text comes from SQLite through the `get_file` tool, so it is the file as it was indexed, not the live branch.
+The file viewer shows one stored file at `/repository/:id/file?path=<path>&line=<n>&end=<m>`. Result names, the **Browse definitions** list and the viewer's own outline all open it. The text comes from the database through the `get_file` tool, so it is the file as it was indexed, not the live branch.
 
 - **Header.** **← Back to repository**, the file path, and `<language> · lines A–B of N`.
 - **Lines.** The viewer shows 400 lines at a time, the most `get_file` returns in one call. With a target line, the window starts 20 lines above it, the target lines (`line` to `end`) are highlighted, and the page scrolls them into view. **↑ Previous 400 lines** and **↓ Next 400 lines** move the window.
@@ -235,9 +242,9 @@ The Dashboard page lists every repository.
 
 - **Header.** `Repository Dashboard`, `Manage and explore your code repositories with real-time updates`, and an **Add Repository** button that goes to Home.
 - **Four tiles.** `Total Repositories`, `Completed`, `Processing` (pending and processing together) and `Failed`.
-- **The list.** Under `Your Repositories`, one card per repository, with `N repository processing` or `N repositories processing` when runs are active. Each card shows the name, description, status badge, **View Details** and a trash button (labelled `Delete <name>`). The body shows the files, lines, language (`Unknown` if none) and branch (`default` if none). A failed repository shows its reason in red. A completed repository that left files out shows its `Partially indexed` note in amber. A processing repository shows a progress bar with `N / M files processed` and a pulsing `Live updates`, or an indeterminate bar before the first batch. At the bottom, a source link reads **View on GitHub →** for github.com and **View source →** for any other host.
+- **The list.** Under `Your Repositories`, one card per repository, with `N repository processing` or `N repositories processing` when runs are active. Each card shows the name, description, status badge, **View Details** and a trash button (labelled `Delete <name>`). The body shows the files, lines, language (`Unknown` if none) and branch (`default` if none). A failed repository shows its reason in red. A completed repository that left files out shows its `Partially indexed` note in amber. A processing repository shows a progress bar with the stage and its counts, such as `Parsing and storing files… 200 / 214 files`, and a pulsing `Live updates`, or an indeterminate bar with the stage alone before the first batch. At the bottom, a source link reads **View on GitHub →** for github.com and **View source →** for any other host.
 - **Refreshing.** While any repository is `pending` or `processing` the list reloads every 3 seconds (every 15 seconds while the WebSocket is connected), and the page subscribes over the WebSocket to each active repository. Otherwise the list is considered fresh for 30 seconds, which picks up repositories added from another tab or by an MCP client.
-- **Delete.** The same dialog as on the repository page, ending `...including search indexes.` The same toasts apply. A 404 is treated as success and the list refreshes.
+- **Delete.** The same dialog as on the repository page, ending `...including search indexes.` The same toasts apply, except a 404: the repository was already gone, so the list refreshes without a toast.
 - **No reprocess here.** Open the repository and use its card.
 
 | State | What you see |
@@ -278,6 +285,7 @@ Toasts appear at the top right, can be dismissed by clicking them or the ✕, an
 | `Repository added` | Green | A repository was created |
 | `Repository analysis complete`, `<name> is ready for search.` | Green, 6 s | A run reached `completed` while you were subscribed. Shown once per change. |
 | `Repository partially indexed`, `<name>: Partially indexed: ...` | Yellow, 8 s | A run reached `completed` but left files out. Shown instead of the green toast. |
+| `Reprocessing failed`, `<name>: Reprocessing failed: <reason>. Search still uses the previous index.` | Yellow, 8 s | A reprocess of a completed repository failed, and the previous index is still searched |
 | `Repository analysis failed` with the reason | Red, 8 s | A run reached `failed` |
 | `API key rejected` | Red, 10 s | HTTP 401 or WebSocket close 1008. It says to set `VITE_CODESAGE_API_KEY` to the key the backend expects, then rebuild or restart the frontend. It fires once, then stays quiet until a request succeeds. A `401` from the production login (nginx's basic auth) doesn't raise it: the browser asks you to sign in again. |
 | `Reprocessing started`, `Reprocessing not started`, `Failed to start reprocessing` | Green, yellow, red | See [Reprocess](#reprocess) |
@@ -285,7 +293,7 @@ Toasts appear at the top right, can be dismissed by clicking them or the ✕, an
 
 ## Troubleshooting the dashboard
 
-- **Every action gives `Invalid or missing API key`.** `frontend/.env` and `backend/.env` hold different keys. Run `make setup`, then restart Vite.
+- **Every action gives `The server rejected the API key: this app's key doesn't match the server's.`** `frontend/.env` and `backend/.env` hold different keys. Run `make setup`, then restart Vite.
 - **`Cannot reach the CodeSage server`.** Start the backend with `make start-backend`.
 - **No `Live` pill, but progress still moves.** The WebSocket isn't connected and polling is doing the work. Click **Reconnect** if the card shows.
 - **`Cross-origin request refused` or `Host not allowed`.** The page's origin or host isn't allowed. See [Security](/docs/concepts/security/).

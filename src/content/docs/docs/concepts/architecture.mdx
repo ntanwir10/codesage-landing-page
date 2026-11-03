@@ -6,7 +6,7 @@ description: How the CodeSage backend, bridge, dashboard and proxies fit togethe
 import { Aside, Badge, FileTree } from '@astrojs/starlight/components';
 import Mermaid from '~/components/Mermaid.astro';
 
-CodeSage is a self-hosted tool. There is no hosted demo: you run the backend on your own machine or server, with your own Algolia account. Everything that does work runs inside one FastAPI process. The other parts are clients (the dashboard, the MCP bridge) or proxies (nginx) that talk to that process.
+CodeSage is a self-hosted tool. There is no hosted demo: you run the backend on your own machine or server, with your own Algolia account. Everything that does work runs inside one FastAPI process, unless you move indexing out to worker processes. The other parts are clients (the dashboard, the MCP bridge) or proxies (nginx) that talk to that process.
 
 This page explains what each part is, why it was built that way, and what happens in order when the server starts, when a request arrives and when an MCP client calls a tool. For the numbers behind indexing, read [the indexing pipeline](/docs/concepts/indexing-pipeline/). For the index itself, read [search](/docs/concepts/search/).
 
@@ -21,13 +21,13 @@ This page explains what each part is, why it was built that way, and what happen
     nginx --> api["CodeSage backend<br/>FastAPI: REST, WebSocket, MCP tools"]
     api -- "starts" --> job["Indexing job"]
     job -- "fetch files" --> github["GitHub API,<br/>or git clone"]
-    job -- "store" --> db[("SQLite<br/>files and entities")]
+    job -- "store" --> db[("SQLite or Postgres<br/>files and entities")]
     job -- "index" --> algolia[("Algolia<br/>search index")]
     api -- "search" --> algolia
     api -- "read files" --> db
 `} />
 
-The split of work follows one rule: Algolia answers questions about meaning (which function matches these words), and SQLite answers questions about exact content (give me lines 40 to 80 of this file). Searching goes to Algolia. Reading a file, listing definitions, analysing a repository and finding patterns go to SQLite. That is why every repository is stored twice: once as full file text in SQLite, once as small records in Algolia.
+The split of work follows one rule: Algolia answers questions about meaning (which function matches these words), and the database answers questions about exact content (give me lines 40 to 80 of this file). Searching goes to Algolia. Reading a file, listing definitions, analysing a repository and finding patterns go to the database. That is why every repository is stored twice: once as full file text in the database, once as small records in Algolia.
 
 ## Components
 
@@ -36,8 +36,8 @@ The split of work follows one rule: Algolia answers questions about meaning (whi
 | App entry | [`backend/app/main.py`](https://github.com/ntanwir10/codesage-algolia-challenge/blob/master/backend/app/main.py) | Builds the FastAPI app, validates settings, runs migrations and crash recovery at start-up, and serves `/health`, `/` and `/ws`. Adds the request guard, CORS and an `X-Request-ID` header. |
 | REST API | [`backend/app/api/v1/endpoints/`](https://github.com/ntanwir10/codesage-algolia-challenge/tree/master/backend/app/api/v1/endpoints) | `repositories.py` (create, update, delete, status, stats, freshness, process) and `ai.py` (MCP tool calls, resources, search suggestions). Mounted under `/api/v1`. |
 | Core | [`backend/app/core/`](https://github.com/ntanwir10/codesage-algolia-challenge/tree/master/backend/app/core) | `config.py` (settings and start-up validation), `security.py` (API key, request guard, rate limiter, failure messages), `database.py` (engine and session) and `migrations.py` (Alembic at start-up). |
-| Models | [`backend/app/models/`](https://github.com/ntanwir10/codesage-algolia-challenge/tree/master/backend/app/models) | SQLAlchemy tables `Repository`, `CodeFile` and `CodeEntity`. See [the data model](/docs/concepts/data-model/). |
-| Services | [`backend/app/services/`](https://github.com/ntanwir10/codesage-algolia-challenge/tree/master/backend/app/services) | `repository_service.py` (job lifecycle), `github_service.py` (listing and download), `git_source.py` (public repositories on other hosts, read with git), `code_parser.py` (entities), `algolia_service.py` (index and search), `mcp_tools.py` (the eight tools) and `websocket_service.py` (live status). |
+| Models | [`backend/app/models/`](https://github.com/ntanwir10/codesage-algolia-challenge/tree/master/backend/app/models) | SQLAlchemy tables `Repository`, `CodeFile`, `CodeEntity` and `Job`. See [the data model](/docs/concepts/data-model/). |
+| Services | [`backend/app/services/`](https://github.com/ntanwir10/codesage-algolia-challenge/tree/master/backend/app/services) | `repository_service.py` (job lifecycle), `github_service.py` (listing and download), `git_source.py` (public repositories on other hosts, read with git), `code_parser.py` (entities), `algolia_service.py` (index and search), `embeddings.py` (vectors for search by meaning), `mcp_tools.py` (the eight tools) and `websocket_service.py` (live status). |
 | MCP bridge | [`backend/codesage_mcp/`](https://github.com/ntanwir10/codesage-algolia-challenge/tree/master/backend/codesage_mcp) | The stdio MCP server that your MCP client runs. It holds no data. It turns `tools/call`, `resources/list` and `resources/read` into HTTP calls to `/api/v1/ai`, and answers `tools/list`, `resources/templates/list` and its two prompts itself. |
 | Dashboard | [`frontend/`](https://github.com/ntanwir10/codesage-algolia-challenge/tree/master/frontend) | React and Vite. `services/api.ts` and `services/websocket.ts` are the REST and WebSocket clients. |
 | nginx | [`deployment/nginx.conf`](https://github.com/ntanwir10/codesage-algolia-challenge/blob/master/deployment/nginx.conf), [`deployment/nginx.prod.conf.template`](https://github.com/ntanwir10/codesage-algolia-challenge/blob/master/deployment/nginx.prod.conf.template) | Dev: a plain HTTP proxy that drops requests for any `Host` except `localhost` and `127.0.0.1`. Prod: TLS, basic auth and API-key injection. See [Production deployment](/docs/guides/production/). |
@@ -71,7 +71,7 @@ Both entry points reach the same indexing service, so a repository added from yo
     repos -- "schedules" --> job["Indexing job<br/>at most 2 at once"]
     job --> github["Fetch<br/>GitHub API or git clone"]
     job --> parser["Code parser<br/>tree-sitter, Python ast"]
-    job --> db[("SQLite")]
+    job --> db[("Database")]
     job --> algolia[("Algolia")]
     job -- "progress" --> ws
     mcp --> tools["MCP tools"]
@@ -97,7 +97,7 @@ The catch-all `500` handler is different. It sits in Starlette's outermost error
     participant Claude as MCP client
     participant Bridge as MCP bridge
     participant API as Backend
-    participant Data as Algolia or SQLite
+    participant Data as Algolia or the database
     You->>Claude: ask a question
     Claude->>Bridge: tools/call
     Bridge->>API: POST /ai/mcp/tools/call
@@ -111,7 +111,7 @@ The catch-all `500` handler is different. It sits in Starlette's outermost error
 
 - **Bridge.** It checks the arguments with the same models the backend uses, refuses to send the key over plain `http://` to a remote host, and posts `{tool_name, arguments}` to `/api/v1/ai/mcp/tools/call`.
 - **nginx (prod).** The request goes through nginx, which checks your login and adds the API key. The bridge sends a basic-auth login instead of a key in this case.
-- **Backend.** The guard checks the `Host`. The route checks the key and the 30-per-minute limit. `search_code` queries Algolia. The other tools read SQLite. Every tool except `list_repositories` and `add_repository` refuses a repository that is not `completed`, and says why or how far along it is.
+- **Backend.** The guard checks the `Host`. The route checks the key and the 30-per-minute limit. `search_code` queries Algolia. The other tools read the database. Every tool except `list_repositories` and `add_repository` refuses a repository that is not `completed`, and says why or how far along it is.
 - **Errors.** A tool failure such as an unknown repository comes back as HTTP `200` with `is_error: true`, so the assistant sees the message. A rejected key (`401`), a refused host (`403`), a wrong URL (`404`), bad arguments (`422`), a rate limit (`429`), a backend error (`5xx`), a timeout or an unreachable backend all become a tool error that says what to fix. The full table is in [MCP endpoints and errors](/docs/reference/mcp-endpoints/).
 
 ## The request path: dev versus prod
@@ -145,18 +145,20 @@ Both stacks run exactly one uvicorn worker (`--workers 1` in `backend/Dockerfile
 
 | State | Where it lives | What breaks with two workers |
 | --- | --- | --- |
-| Job table (`_jobs`) | A module-level dict of asyncio tasks in `repository_service.py` | Two workers could index the same repository at once, or one would not see the other's job |
+| Job table (`_jobs`) | A module-level dict of asyncio tasks in `repository_service.py` (inline mode) | Two workers could index the same repository at once, or one would not see the other's job |
 | Run slots | An `asyncio.Semaphore(2)` per event loop | The limit of 2 runs would become 2 per worker |
 | WebSocket subscribers | `WebSocketManager` in `websocket_service.py` | A client subscribed on worker A never hears a broadcast made on worker B |
 | Rate-limit counters | slowapi in-memory storage | Each worker would count separately, so the real limit would be a multiple |
 
 SQLite adds a fifth reason: it allows one writer at a time. WAL mode lets readers work during a write, but it does not allow two writers.
 
+Indexing can still move out. With `INDEX_WORKERS=external`, the API only queues jobs in the `jobs` table, and any number of `python -m app.worker` processes claim them, one job at a time each, with a heartbeat. The API process still owns WebSocket subscriptions and rate limits, so it stays at one worker. See [Configuration](/docs/reference/configuration/).
+
 Inside that one process, blocking work is moved off the event loop so the API, WebSocket and tool calls stay responsive while a repository indexes:
 
 - Parsing runs in a worker thread (`asyncio.to_thread`).
 - The Algolia client (v4 `SearchClientSync`) is synchronous, so each call runs in a worker thread too.
-- Database commits for a batch and the bulk delete before a reprocess run in worker threads.
+- Database commits for a batch and the bulk deletes of a run's old rows run in worker threads.
 - `find_patterns` regex scans run in a thread with a per-file and a per-call time budget.
 
 <Aside type="caution">
@@ -177,7 +179,7 @@ When uvicorn imports `app.main`, some work happens at import time and the rest i
     life --> validate{"validate_runtime_settings<br/>CORS has *? No key on a<br/>non-loopback host?"}
     validate -- "yes" --> stop["RuntimeError, process exits"]
     validate -- "no" --> migrate["upgrade_database<br/>stamp if pre-Alembic, then upgrade head"]
-    migrate --> recover["recover_interrupted_jobs<br/>pending or processing becomes failed"]
+    migrate --> recover["recover_interrupted_jobs<br/>pending or processing runs again in full"]
     recover --> algolia{"Algolia credentials set?"}
     algolia -- "no" --> warn["Log an error and keep running<br/>health reports degraded"]
     algolia -- "yes" --> ready["Log ready"]
@@ -203,7 +205,7 @@ Backend versions are pinned in [`backend/requirements.txt`](https://github.com/n
 | Language | Python | 3.13 |
 | Web framework | FastAPI | 0.161.1 |
 | Server | uvicorn (standard extras) | 0.54.0 |
-| Database | SQLite through SQLAlchemy | 2.1.6 |
+| Database | SQLite, or Postgres through psycopg 3, with SQLAlchemy | 2.1.6 (psycopg 3.3.6) |
 | Migrations | Alembic | 1.20.1 |
 | Search | Algolia (`algoliasearch`, v4 synchronous client) | 4.48.0 |
 | GitHub client | aiohttp | 3.14.5 |
@@ -212,6 +214,7 @@ Backend versions are pinned in [`backend/requirements.txt`](https://github.com/n
 | Rate limiting | slowapi | 0.1.10 |
 | Parsing | tree-sitter-language-pack, plus Python `ast` | 1.22.1 |
 | Regex search | `regex` (supports timeouts) | 2026.9.29 |
+| Search by meaning | numpy, for the ranking | 2.5.4 |
 | MCP | `mcp` SDK and `httpx2` for the bridge | 2.3.0 and 2.16.0 |
 | Tests and lint | pytest, pytest-asyncio, ruff | 9.1.1, 1.4.0 and 0.17.2 |
 | Dashboard | React and React DOM | `^19.1.0` |
@@ -231,12 +234,13 @@ Backend versions are pinned in [`backend/requirements.txt`](https://github.com/n
   - app/ FastAPI app
     - api/v1/endpoints/ repositories.py, ai.py
     - core/ config.py, security.py, database.py, migrations.py
-    - models/ repository.py, code_file.py, code_entity.py
+    - models/ repository.py, code_file.py, code_entity.py, job.py
     - schemas/ pydantic request and response models
-    - services/ the job, fetch, parse, index and tool code
+    - services/ the job, fetch, parse, index, embeddings and tool code
     - main.py
+    - worker.py the external indexing worker
   - codesage_mcp/ stdio MCP bridge (server.py, schemas.py)
-  - alembic/versions/ baseline.py, cleanup.py, drop_unused_columns.py, commit_sha.py
+  - alembic/versions/ baseline.py, cleanup.py, drop_unused_columns.py, commit_sha.py, entity_embeddings.py, jobs.py
   - tests/ pytest suite
   - Dockerfile
   - Dockerfile.prod
@@ -244,7 +248,7 @@ Backend versions are pinned in [`backend/requirements.txt`](https://github.com/n
   - requirements-dev.txt
 - frontend/
   - src/
-    - pages/ Home, Repository, File viewer, Dashboard
+    - pages/ Home, Dashboard, Repository, File viewer, Search
     - components/
     - services/ api.ts, websocket.ts
     - hooks/

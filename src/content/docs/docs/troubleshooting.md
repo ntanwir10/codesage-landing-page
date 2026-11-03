@@ -18,12 +18,12 @@ Find your symptom in the section for the part that is failing. Messages are quot
 | Backend exits with "CODESAGE_API_KEY is required when MCP_SERVER_HOST is not a loopback address" | The host is not `127.0.0.1`, `localhost` or `::1` and no key is set | Set a key, or bind to loopback |
 | Log line "CODESAGE_API_KEY is not set; write endpoints are unauthenticated" | No key on loopback. It is a warning, not an error | Run `make setup`, which generates one |
 | Log line "Algolia credentials not configured - MCP server cannot function properly" | `ALGOLIA_APP_ID` or `ALGOLIA_ADMIN_API_KEY` is empty or still a `your-...-here` placeholder | Set both in `backend/.env` and restart. See [Algolia](#algolia) |
-| `make health` prints "Backend not responding" | The backend is down or answered with an error | `make start-backend`. `make health` also needs `jq` |
-| `403` with `{"detail": "Host not allowed"}` | The `Host` header is not loopback, in `CORS_ORIGINS` or in `ALLOWED_HOSTS` | Use `localhost` or `127.0.0.1`, or add the name to `ALLOWED_HOSTS` |
+| `make health` prints "Backend not responding" | The backend is not reachable, `jq` is not installed, or the answer was not JSON (the health call has no `curl -f`, so an error page reaches `jq`) | `make start-backend`, and install `jq`. `curl http://127.0.0.1:8001/health` shows the raw answer |
+| `403` with `{"detail": "Host not allowed"}` | Without a key, the `Host` header is not loopback: only `localhost`, `127.0.0.1` and `[::1]` are served. With a key, it is not loopback, in `CORS_ORIGINS` or in `ALLOWED_HOSTS` | Use `localhost` or `127.0.0.1`. To serve another name, set a key and add the name to `ALLOWED_HOSTS` |
 | `403` with "Only local clients are served without an API key" | No key is set and the client is not on the same machine | Set `CODESAGE_API_KEY`, or call from the same machine |
 | `403` with "Cross-origin request refused" | A write or WebSocket came from an origin that is not the API's own and not in `CORS_ORIGINS` | Add the full origin (for example `https://host`) to `CORS_ORIGINS` |
 | `401` with "Invalid or missing API key" | The `X-API-Key` is missing or wrong | Send the key from `backend/.env`. See the dashboard rows below |
-| `429` with "Too many requests; try again in N seconds." | A per-address rate limit. Create and process allow 100 a minute, tool calls and resource reads 30 | Wait for `Retry-After`. Everything behind one address shares the count |
+| `429` with "Too many requests; try again in N seconds." | A per-address rate limit. Create, process, freshness and search suggestions allow 100 a minute, tool calls and resource reads 30 | Wait for `Retry-After`. Everything behind one address shares the count |
 | `/docs` returns `404` | `ENVIRONMENT=production` turns the docs off | Use the dev stack or a local run |
 
 ## Dashboard and adding repositories
@@ -31,14 +31,14 @@ Find your symptom in the section for the part that is failing. Messages are quot
 | Symptom | Cause | Fix |
 | --- | --- | --- |
 | Dashboard actions fail with `401`, or an auth notice appears | The key in the dashboard differs from `backend/.env`. The dev bundle reads `VITE_CODESAGE_API_KEY` | Run `make setup` so `frontend/.env` matches, then restart Vite. In Docker dev, re-export `CODESAGE_API_KEY` and run `make build && make up` |
-| Add form shows a message about the URL or branch (`422`) | Not a repository URL the server accepts (https only, with no port, credentials, `localhost` or private address), or an invalid branch name | Use `owner/repo`, a github.com URL or another host's https URL. Branch names cannot contain `..` or start with `-` |
+| Add form shows a message about the URL or branch (`422`) | Not a repository URL the server accepts (https only, with no port, credentials, `localhost` or private address), or an invalid branch name | Use `owner/repo`, a github.com URL or another host's https URL. A branch name must follow git's branch-name rules (no spaces, `..`, `~`, `^`, `:` and so on) and must not start with `-` |
 | "GitHub repository owner/repo was not found" (`422`) | The repository does not exist, or it is private and `GITHUB_TOKEN` cannot read it | Check the URL. For a private repository, give the token access |
 | "Branch 'x' does not exist in owner/repo." or "owner/repo is empty; there is nothing to index." (`422`) | The branch is missing, or the repository has no content | Fix the branch, or leave it empty for the default |
 | "GitHub denied access to owner/repo." (`422`) | GitHub answered `403` for a reason other than a rate limit | Check the token's access |
 | "owner/repo has already been added." (`409`) | Same URL as an existing repository, matched without regard to case | Use the "Open it" link, or reprocess the existing one |
 | "GitHub's API rate limit was reached; try again in about N minutes." (`503`) | GitHub is rate-limiting the server. `Retry-After` says how long | Wait, or set `GITHUB_TOKEN` for a higher limit |
 | "GitHub rejected the server's GITHUB_TOKEN" or "Could not reach GitHub; try again." (`502`) | The token is invalid, or GitHub is down or unreachable | Replace the token, or retry later |
-| "GitHub did not respond in time; try again." (`504`) | A check request took longer than 10 s | Retry |
+| "GitHub did not respond in time; try again." (`504`) | A check request took longer than 10 s. The check makes up to two | Retry |
 | "Search indexing is not configured on the server" (`503`) | Algolia credentials are missing | See [Algolia](#algolia) |
 | Reprocess returns `409` "Repository is already processed; pass force_reprocess=true to reprocess it" | The repository is `completed` | Use `?force_reprocess=true`. The dashboard does this for you |
 | Reprocess or delete returns `409` "is already being processed" or "is being processed" | A job is running for that repository | Wait for it to finish |
@@ -47,7 +47,7 @@ Find your symptom in the section for the part that is failing. Messages are quot
 | WebSocket closes with 1008 | Missing or wrong key, or a refused `Host` or `Origin` | Fix the key or `CORS_ORIGINS`. The client does not retry on 1008 |
 | WebSocket closes with 1013 | 200 connections in total, or 20 from one address | The client retries with backoff. Close extra tabs |
 | Search suggestions never appear | The request needs the key, and the dashboard has none or the wrong one. Suggestions also stay empty when Algolia fails | Fix the key. Check the backend log for "Suggestions unavailable" |
-| "Page not found" | The path is not `/`, `/dashboard`, `/repository/:id` or `/repository/:id/file` | Go to the Home page |
+| "Page not found" | The path is not `/`, `/dashboard`, `/search`, `/repository/:id` or `/repository/:id/file` | Go to the Home page |
 | `422` on an ID or `skip` | The number is larger than the database allows | Use a smaller number |
 
 ## Indexing failures and partial indexes
@@ -61,7 +61,6 @@ The reason is in `error_message`. The dashboard card, `GET /api/v1/repositories/
 | "No supported code files found in repository" | Every file was filtered out: denied folders, lockfiles, unknown extensions, files of 1 MB or more | Check the [file rules](/docs/concepts/indexing-pipeline/#file-selection-rules) |
 | "No code entities were indexed from N files (M failed to process)" | Files were found but none produced entities. CSS, HTML, JSON, YAML, XML and SQL have no parser | Add a repository that has source files in a [supported language](/docs/reference/languages/) |
 | "Algolia rejected the indexing request" | `save_objects` raised an error | Read the backend log for "Failed to index entities in Algolia" |
-| "Could not remove previously indexed records from Algolia" | The delete before a reprocess failed or timed out after 120 s | Check Algolia, then reprocess |
 | "Database error while storing the repository" | A SQLAlchemy error. The real text stays in the log | Read the backend log for "Repository processing failed" |
 | "GitHub API rate limit exceeded (403) while reading owner/repo; try again in about N minutes" | The limit was hit mid-run, and the wait would be over 60 s or a second limit followed | Wait, set `GITHUB_TOKEN`, reprocess |
 | "GitHub rejected the token (401) for owner/repo; check GITHUB_TOKEN" | The token is wrong or revoked | Replace it |
@@ -71,13 +70,16 @@ The reason is in `error_message`. The dashboard card, `GET /api/v1/repositories/
 | "GitHub did not respond in time while reading ..." or "Could not reach GitHub while reading ..." | Timeouts or connection errors after 3 attempts | Retry later |
 | "Could not clone host/path from host" (502), "host did not respond in time while cloning ..." (504), "Could not run git to clone ..." (503) | The clone failed, took over 120 s, or git is not installed | Check the host and that the image or machine has `git` |
 | "host/path was not found or is private; only public repositories are supported on host" | A non-GitHub repository is missing or needs a login | Make it public |
-| "... The previous index was removed; reprocess to rebuild it." at the end of a message | A reprocess cleared the old index and then failed | The repository has nothing searchable until you reprocess |
+| `Reprocessing failed: <reason>. Search still uses the previous index.` with status `completed` | A reprocess of a completed repository failed. Its previous index was never touched | Search keeps working on the previous run. Fix the reason, then reprocess |
 | Status `completed` with "Partially indexed: N of M files could not be stored" | A database commit failed for a batch of 200 files | Read the log for "Failed to store file batch" |
 | "Partially indexed: N files could not be parsed" | A parser raised an error on those files. They are stored, but have no entities | Read the log for "Failed to parse code file" |
 | "Partially indexed: N files over the 1000-file or 100 MB limit were skipped" | The repository is over a cap. Files that yield no entities are left out first, then Markdown, then tests, then source; within a group, the files that sort last by path | Index a smaller branch or accept it |
 | "Partially indexed: the repository is too large to list in full, so some directories were not indexed" | The contents-API walk hit its 300-request cap | Accept it, or index a smaller repository |
+| "Partially indexed: N definitions have no semantic search vectors (the embedding API failed)" | The embeddings provider failed. Keyword search is complete | Check `EMBEDDING_API_KEY` and the provider, then reprocess |
+| "Partially indexed: search still holds the previous run's records until the next run" | The run could not send the Algolia delete for the previous run's records, so search can return them as well | Check Algolia, then reprocess |
+| "Partially indexed: search still holds old records for some changed or removed files until they change again or a full reprocess" | An incremental run could not delete those files' earlier records | Check Algolia, then run a full reprocess |
 | Stays `processing` with progress 0 | Two runs are already active and this one waits for a slot | Wait |
-| Stays `processing` although the server was killed | The process died before it could record a failure | Start the backend. Start-up marks the row `failed`. Then reprocess |
+| Stays `processing` although the server was killed | The process died during the run | Start the backend. Start-up runs the repository again in full, and its previous index stays searchable meanwhile |
 | Some C or C++ files are missing | `.h`, `.hpp` and `.cc` are not in the extension map. Only `.c` and `.cpp` are | Known limit. See [Known limitations](/docs/limitations/) |
 
 ## MCP clients and the bridge
@@ -147,7 +149,7 @@ The bridge writes to stderr, which your MCP client saves in its MCP log (Cursor 
 | "Search is not configured on the server (ALGOLIA_APP_ID / ALGOLIA_ADMIN_API_KEY are missing)." | Same cause, seen from a tool | As above |
 | "Search is unavailable; try again later." | Algolia is unreachable or rejected the query. The detail is in the log only | Read the backend log for "MCP search failed" |
 | Searches return nothing | The repository is not `completed`, the index name changed, or the index is shared and was cleaned | Check the status, and `ALGOLIA_INDEX_NAME` |
-| Records of one repository vanish after another is deleted | Two databases share one index and both number repositories from 1 | Give each database its own `ALGOLIA_INDEX_NAME`. The Compose files already do |
+| Records of one repository vanish after another is deleted or reprocessed | Two databases share one index and both number repositories from 1 | Give each database its own `ALGOLIA_INDEX_NAME`. The Compose files already do |
 | Log says "Algolia indexing still publishing" | A task was not published within 300 s. The records were accepted | Results appear shortly. No action |
 | Log says "Failed to configure Algolia index settings" | `set_settings` failed. The run continues | Check the admin key's permissions |
 | Results appear in the wrong order | Ranking breaks ties with `is_test` (source before tests), then `rank_weight`. Names rank above bodies | See [Search](/docs/concepts/search/#ranking) |
@@ -161,6 +163,6 @@ The bridge writes to stderr, which your MCP client saves in its MCP log (Cursor 
 - **The status endpoint.** `GET /api/v1/repositories/{id}/status` returns `status`, `processed_files`, `total_files`, `progress` and `error_message`. `GET /api/v1/repositories/` lists all of them.
 - **MCP checks.** `make test-mcp` calls the capabilities and tool-list endpoints. The MCP Inspector (`npx @modelcontextprotocol/inspector ./mcp_launcher.sh`) lets you call a tool by hand.
 - **nginx.** In Docker, `docker compose -f <file> logs nginx`. The dev nginx logs the client address, request, status and user agent. Prod adds the login name.
-- **Browser console.** The dashboard logs "WebSocket rejected by the server: check VITE_CODESAGE_API_KEY" when the key is wrong.
+- **Browser console.** The dashboard logs "WebSocket rejected by the server: the API key doesn't match" when the key is wrong.
 
 Still stuck? See [Known limitations](/docs/limitations/) in case what you hit is by design, or the [FAQ](/docs/faq/).

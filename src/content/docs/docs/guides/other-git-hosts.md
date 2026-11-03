@@ -69,7 +69,7 @@ A URL the backend rejects comes back as an error that starts with `url:` and say
 | A `/-/` not followed by `tree`; a GitHub URL with extra segments other than `/tree/<branch>`; a Bitbucket URL with extra segments other than `/src/<branch>` | `Invalid repository URL (unsupported path): <url>` |
 | Fewer than two path segments | `Invalid repository URL (missing owner or repository): <url>` |
 | A segment with other characters, or `.` and `..` | `Invalid repository URL (bad owner or repository name): <url>` |
-| A branch starting with `-` or containing a `..` segment | `Invalid repository URL (bad branch): <url>` |
+| A branch that breaks git's branch-name rules (`git check-ref-format`: no spaces, `..`, `~`, `^`, `:`, `?`, `*`, `[`, `\` and so on) or starts with `-` | `Invalid repository URL (bad branch): <url>` |
 | A branch argument with the same faults | `branch: Invalid branch name` |
 | An empty or whitespace-only URL | `Invalid repository URL: empty` |
 | Over 500 characters | `url: String should have at most 500 characters` |
@@ -128,7 +128,7 @@ For a non-GitHub URL the check refuses with one of these, and nothing is created
 | `<host>/<path> is empty; there is nothing to index.` | The repository has no branches (checked only when no branch was given) |
 | `<host> did not respond in time; try again.` | The 10 s check timed out |
 | `Could not reach <host>; try again.` | The host failed in another way, or `git` couldn't be started |
-| `<host>/<path> is already added as repository <id>.` | The URL already exists (case-insensitive) |
+| `<host>/<path> is already added as repository <id>.` | The URL already exists (case-insensitive). This is the `add_repository` tool's text. The REST API and the dashboard say `<host>/<path> has already been added.` with status `409` |
 | `Search indexing is not configured on the server (Algolia credentials are missing).` | `ALGOLIA_APP_ID` or `ALGOLIA_ADMIN_API_KEY` is unset |
 | `url: ...` | The URL was rejected, see the table above |
 

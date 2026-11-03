@@ -6,11 +6,11 @@ description: How CodeSage builds Algolia records, configures the index, ranks re
 import { Aside } from '@astrojs/starlight/components';
 import Mermaid from '~/components/Mermaid.astro';
 
-CodeSage searches with Algolia. You bring your own Algolia application: there is no shared or hosted index. Each parsed entity (a function, a class, an import, a Markdown section or a Terraform block) becomes one Algolia record. The `search_code` tool queries those records, and leaves imports out unless you ask for them. Every other tool reads SQLite, because they need exact file text and Algolia only holds short summaries.
+CodeSage searches with Algolia. You bring your own Algolia application: there is no shared or hosted index. Each parsed entity (a function, a class, an import, a Markdown section or a Terraform block) becomes one Algolia record. The `search_code` tool queries those records, and leaves imports out unless you ask for them. Every other tool reads the database (SQLite or Postgres). The tools that return file text need the exact text, and Algolia only holds short summaries.
 
 `AlgoliaService` in [`backend/app/services/algolia_service.py`](https://github.com/ntanwir10/codesage-algolia-challenge/blob/master/backend/app/services/algolia_service.py) builds the records and applies the settings. The tool code in [`backend/app/services/mcp_tools.py`](https://github.com/ntanwir10/codesage-algolia-challenge/blob/master/backend/app/services/mcp_tools.py) shapes the results.
 
-<Mermaid caption="One search_code call. Algolia ranks; SQLite is only asked for repository details such as the URL and indexed commit used to build links." code={`flowchart TD
+<Mermaid caption="One keyword search_code call (a search by meaning skips Algolia, see below). Algolia ranks; the database is only asked for repository details such as the URL and indexed commit used to build links." code={`flowchart TD
     call["search_code(query, repository, language, entity_type, limit, page)"] --> repo{"repository given?"}
     repo -- "yes" --> ready{"status completed?"}
     ready -- "no" --> refuse["Tool error: failed reason<br/>or indexing progress"]
@@ -29,8 +29,9 @@ CodeSage searches with Algolia. You bring your own Algolia application: there is
 
 | Field | Content |
 | --- | --- |
-| `objectID` | `<repository_id>_<sha1 of path:type:name:line>`. See [the objectID scheme](#the-objectid-scheme) |
+| `objectID` | `<repository_id>_<sha1 of run_id:path:type:name:line>`. See [the objectID scheme](#the-objectid-scheme) |
 | `repository_id` | The numeric repository ID. Every query filters on it |
+| `run_id` | The run that wrote the record: 12 hex characters, new for each run |
 | `file_path` | Path inside the repository |
 | `language` | The file's language, such as `python` or `terraform` |
 | `entity_type` | `function`, `class`, `import`, `doc_section` or `terraform_block` |
@@ -48,9 +49,9 @@ CodeSage searches with Algolia. You bring your own Algolia application: there is
 
 ### The objectID scheme
 
-The ID is `<repository_id>_<sha1>`. The hash input is `file_path:entity_type:entity_name:line_start`. For example `src/auth/tokens.py:function:refresh_token:42` in repository 12 gives `12_07946c80715046c23e5533f046a8e8b6c92231e5`.
+The ID is `<repository_id>_<sha1>`. The hash input is `run_id:file_path:entity_type:entity_name:line_start`. For example `5d1e0c3a9b7f:src/auth/tokens.py:function:refresh_token:42` in repository 12 gives `12_ebd41c4950bd5294ecb78563cc7b3db79be6a647`.
 
-The ID is stable on purpose. Indexing the same entity again overwrites its record instead of duplicating it. A change to the entity's line number gives it a new ID, which is why a reprocess deletes the repository's old records first. The leading repository ID is what lets `delete_by` and the `repository_id` filter act on one repository.
+The run ID is in the hash on purpose. Each run writes new records and never overwrites the previous run's, so a reprocess leaves the old index searchable while it runs. When the new run is complete, it deletes every record of the repository whose `run_id` is not its own. An incremental run keeps the records of the files it reused. A failed run deletes only its own records. The leading repository ID is what lets `delete_by` and the `repository_id` filter act on one repository.
 
 ### How `content` is built
 
@@ -72,8 +73,9 @@ This is a function record for an illustrative Python function at lines 42 to 48 
 
 ```json title="One Algolia record"
 {
-  "objectID": "12_07946c80715046c23e5533f046a8e8b6c92231e5",
+  "objectID": "12_ebd41c4950bd5294ecb78563cc7b3db79be6a647",
   "repository_id": 12,
+  "run_id": "5d1e0c3a9b7f",
   "file_path": "src/auth/tokens.py",
   "entity_type": "function",
   "entity_name": "refresh_token",
@@ -108,7 +110,7 @@ Reading it field by field:
 | Setting | Value | Why |
 | --- | --- | --- |
 | `searchableAttributes` | `entity_name`, `description`, `content`, `parameters`, `file_path`, in that order | Order sets priority. A match in the name beats a match in the body |
-| `attributesForFaceting` | `filterOnly(repository_id)`, `entity_type`, `language`, `file_path` | Lets the filters in a query work. `filterOnly` skips facet counts for the ID |
+| `attributesForFaceting` | `filterOnly(repository_id)`, `filterOnly(run_id)`, `entity_type`, `language`, `file_path` | Lets the filters in a query and in `delete_by` work. `filterOnly` skips facet counts for the IDs |
 | `camelCaseAttributes` | `entity_name` | Part of a camelCase name matches: `WithState` finds `TestShallowWithState`, and `getUserById` is also found by `user` and `ById` |
 | `customRanking` | `asc(is_test)`, `desc(rank_weight)` | Breaks relevance ties: source before tests, then classes first |
 | `highlightPreTag`, `highlightPostTag` | `<mark>` and `</mark>` | Highlight markers in Algolia's highlight output |
@@ -171,11 +173,11 @@ Imports are searched only when you ask for `entity_type: "import"`. An import li
 
 The language and entity type values go through `_escape_filter_value`, which escapes backslashes and double quotes. A value cannot close the quote and add a filter clause of its own.
 
-Without a repository, `search_code` searches every repository. That includes repositories being reprocessed, since the filter only knows about the ID. See [Known limitations](/docs/limitations/).
+Without a repository, `search_code` searches every repository. That includes repositories being reprocessed, since the filter only knows about the ID. Until a reprocess completes, a hit can come from the previous run's records or the new run's. The previous run's records can also stay searchable for a short time after the run is `completed`, until Algolia applies the delete. See [Known limitations](/docs/limitations/).
 
 ## Results and source links
 
-Each hit becomes a result with these fields: `entity_name`, `entity_type`, `file_path`, `line_start`, `line_end`, `language`, `signature`, `snippet`, `description` and `url`. The response also carries `query`, `repository`, `total_hits`, `page` and `pages`.
+Each hit becomes a result with these fields: `repository_id`, `repository` (its name, since a search across all repositories mixes several), `entity_name`, `entity_type`, `file_path`, `line_start`, `line_end`, `language`, `signature`, `snippet`, `description` and `url`. The response also carries `query`, `repository`, `total_hits`, `page` and `pages`. A search by meaning adds `mode: "semantic"` to the response and a `score` to each result, and its `snippet` is empty.
 
 | Field | Limit |
 | --- | --- |
@@ -198,7 +200,7 @@ Without a start line, the link points at the file with no line anchor. In the da
 
 `GET /api/v1/ai/search/suggestions` drives the dashboard's auto-complete. It needs the API key (it searches all repositories, like `search_code`) and is limited to 100 requests a minute.
 
-- A query shorter than 2 characters (after trimming) returns an empty list.
+- A query shorter than 2 characters (after trimming), or one with no letter or digit, returns an empty list.
 - It asks Algolia for twice the requested limit (the limit is 1 to 20, default 10) and returns the distinct `entity_name` values in rank order. Like `search_code` without an entity type, it leaves imports out.
 - With `mode=semantic` it embeds the query and returns the names of the definitions closest in meaning instead (see [Search by meaning](#search-by-meaning)). Without an embeddings key it returns nothing.
 - Any failure returns an empty list, because a broken suggestion box should never break the page.
@@ -210,16 +212,16 @@ With [`EMBEDDING_API_KEY`](/docs/reference/configuration/) set, every indexing r
 - Only vectors from the current `EMBEDDING_MODEL` compare, so after changing the model, reprocess.
 - Searching every repository leaves out any repository being reprocessed until it completes.
 - Every definition is ranked, so pages go past Algolia's 1000-hit limit, and each hit carries a `score` (the similarity, higher is closer).
-- The ranking runs in Python over the stored vectors, which is fine for thousands of definitions. See [Known limitations](/docs/limitations/).
+- The ranking loads the stored vectors into one numpy matrix and scores them with a single matrix product. It still reads every vector on each query. See [Known limitations](/docs/limitations/).
 
 ## Waits and timeouts
 
-Indexing and deleting return a task ID. Algolia can leave a task unpublished indefinitely, so CodeSage polls `get_task` itself with a deadline.
+Indexing and deleting return a task ID. Algolia can leave a task unpublished indefinitely, so where CodeSage waits, it polls `get_task` itself with a deadline. Only indexing waits.
 
 | Operation | Behaviour | Deadline |
 | --- | --- | --- |
 | Index records | Waits for each batch's task to be published | 300 s. On timeout it logs a warning and the run continues, because the records were accepted |
-| Delete before a reprocess | Waits for the `delete_by` task | 120 s. On timeout the run fails, to avoid stale records |
+| Delete the previous run's records | Sends `delete_by` after the new run is indexed, and does not poll | None. Algolia applies an index's tasks in order, and a timeout must not discard a good run. A failed request leaves a `Partially indexed` note |
 | Plain repository delete | Sends `delete_by` and does not poll | None. Algolia applies an index's tasks in order |
 | Index settings | Not waited on | None |
 | `/health` Algolia probe | a `GET 1/indexes` request (`custom_get`; v4's `list_indices` model rejects this API's response) in a worker thread | 5 s, and the result is cached for 30 s |
@@ -234,7 +236,7 @@ CodeSage uses the synchronous v4 `algoliasearch` client (`SearchClientSync`), be
 
 ## One index per stack
 
-Records are keyed by repository ID, and each database numbers its repositories from 1. If a local database and a Docker database shared an index, repository 1 in each would write the same `1_<hash>` IDs when paths and lines match, and a delete of repository 1 in one would remove the other's records through `repository_id=1`.
+Records are keyed by repository ID, and each database numbers its repositories from 1. If a local database and a Docker database shared an index, a completed run of repository 1 in one would delete every `repository_id=1` record that isn't from its own run, which includes the other's records. Deleting repository 1 in one would remove them too.
 
 That is why each stack has its own index name:
 

@@ -121,7 +121,7 @@ Limits come from slowapi, per client address, and are held in memory. Set `ENABL
 
 | Endpoints | Limit |
 | --- | --- |
-| Repository create, repository process, search suggestions | 100 per minute |
+| Repository create, repository process, index freshness, search suggestions | 100 per minute |
 | MCP tool calls, MCP resource reads | 30 per minute |
 
 Other endpoints have no limit. A request over the limit gets `429` with `{"detail": "Too many requests; try again in N seconds."}` and a `Retry-After` header.
@@ -144,7 +144,7 @@ Code 1013 means "try again later", so the dashboard's reconnect backoff applies.
 ## Secrets in errors and logs
 
 - **Unhandled exceptions.** The client gets `500` with `{detail, request_id}` and an `X-Request-ID` header. The traceback goes to the log under that ID. The text of the exception is never sent.
-- **Recorded failures.** `failure_message` writes `error_message`, WebSocket frames, metrics and parse logs. A SQLAlchemy error becomes the fixed text "Database error while storing the repository", because its text carries SQL and file contents. Errors written for people are kept. Other errors are truncated to 500 characters.
+- **Recorded failures.** `failure_message` writes `error_message`, WebSocket frames and parse logs. A SQLAlchemy error becomes the fixed text "Database error while storing the repository", because its text carries SQL and file contents. Errors written for people are kept. Other errors are truncated to 500 characters.
 - **Tool errors.** A failed Algolia query reaches the assistant as "Search is unavailable; try again later", and the health check says only "Algolia is unreachable". Client errors can name the Algolia host or app ID, so they stay in the log.
 - **The bridge.** Messages and logs show the backend URL without any `user:password@`. The start-up line records only whether a key is set, never its value.
 - **The installer.** `make install-claude ARGS=--dry-run` masks the key. `ensure_api_key.py` never prints it.
@@ -210,7 +210,7 @@ A repository URL is the one piece of input that makes the server contact somewhe
 - It has no port, query or fragment.
 - The host is not `localhost`, not a name ending in `.localhost`, and not an IP literal that is non-public (private, loopback, link-local or reserved).
 - The path has an owner and a repository, each made only of letters, digits, `_`, `.` and `-`. `.` and `..` are refused, because `..` as an owner would turn `api.github.com/users/<owner>` into `api.github.com/user`.
-- A branch has no `..` segment, no NUL character and does not start with `-`, so it can never read as an option to git or step out of an API path.
+- A branch follows git's branch-name rules (`git check-ref-format`): no control characters or spaces, none of `~^:?*[\`, no `..`, `@{` or `//`, no part starting with `.` or ending in `.lock`, and no leading or trailing `/` or trailing `.`. It also may not start with `-`, so it can never read as an option to git or step out of an API path.
 
 The validator reads the URL text. It does not resolve DNS, so it cannot see where a public-looking hostname points. For hosts other than github.com, the git source checks that before git runs (next list).
 

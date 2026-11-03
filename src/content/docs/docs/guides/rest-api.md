@@ -16,7 +16,7 @@ export CODESAGE_API_KEY=$(sed -n 's/^CODESAGE_API_KEY=//p' backend/.env)
 export BASE=http://127.0.0.1:8001
 ```
 
-Reads need no key. Writes (create, edit, delete, process), the MCP tool call and the `/ws` socket do, and you send it in an `X-API-Key` header. If the backend runs without a key on loopback, the header is ignored.
+Most reads need no key. Writes (create, edit, delete, process), the MCP tool call, MCP resource reads, search suggestions and the `/ws` socket do, and you send it in an `X-API-Key` header. If the backend runs without a key on loopback, the header is ignored.
 
 ## 1. Check health
 
@@ -74,7 +74,7 @@ This response is illustrative. Creating a repository is a write call, so it was 
 }
 ```
 
-The backend checks the repository on GitHub before it creates anything (10 seconds, one attempt). It then starts indexing in the background and returns at once. `commit_sha` stays `null` until the run resolves the branch to a commit; times are UTC, with a `Z` suffix. Note the `id`. You use it in every later step.
+The backend checks the repository on its host before it creates anything (one attempt, 10 seconds per request; on GitHub that is up to two requests). It then starts indexing in the background and returns at once. `commit_sha` stays `null` until the run resolves the branch to a commit; times are UTC, with a `Z` suffix. Note the `id`. You use it in every later step.
 
 To index a branch, add `"branch": "release"` or use a branch URL such as `https://github.com/pmndrs/zustand/tree/release`. An empty `"branch": ""` means the default branch.
 
@@ -82,7 +82,7 @@ To index a branch, add `"branch": "release"` or use a branch URL such as `https:
 Add the trailing slash in `/api/v1/repositories/`. Without it, the framework redirects the request and an extra round trip happens.
 :::
 
-Other git hosts go through the `add_repository` MCP tool. See [Other git hosts](/docs/guides/other-git-hosts/).
+Other git hosts work the same way: send any https repository URL, such as `https://gitlab.com/group/project`. The `add_repository` MCP tool takes the same URLs. See [Other git hosts](/docs/guides/other-git-hosts/).
 
 ## 3. Poll the status
 
@@ -291,7 +291,7 @@ curl -sS -X POST $BASE/api/v1/ai/mcp/tools/call \
   -d '{"tool_name": "search_code", "arguments": {"query": "createStoreImpl", "repository": "pmndrs/zustand", "limit": 2}}'
 ```
 
-Real output, trimmed: the `snippet` strings are shortened with `…`.
+Real output, trimmed: the `snippet` strings are shortened with `…`. Each result names its repository (`repository_id` and `repository`), since a search without `repository` mixes several.
 
 ```json title="Expected response"
 {
@@ -304,6 +304,8 @@ Real output, trimmed: the `snippet` strings are shortened with `…`.
     "pages": 3,
     "results": [
       {
+        "repository_id": 2,
+        "repository": "pmndrs/zustand",
         "entity_name": "createStoreImpl",
         "entity_type": "function",
         "file_path": "src/vanilla.ts",
@@ -316,6 +318,8 @@ Real output, trimmed: the `snippet` strings are shortened with `…`.
         "url": "https://github.com/pmndrs/zustand/blob/HEAD/src/vanilla.ts#L60-L97"
       },
       {
+        "repository_id": 2,
+        "repository": "pmndrs/zustand",
         "entity_name": "setState",
         "entity_type": "function",
         "file_path": "src/vanilla.ts",
@@ -391,7 +395,7 @@ Changing `branch`, `language` or `framework` while a run is active returns `409`
 {"detail": "Repository 2 is being processed; change branch when it finishes"}
 ```
 
-Changing the branch does not re-index. Reprocess to index the new branch.
+Changing the branch of a `completed` or `failed` repository re-indexes it from the new branch by itself, after checking that the branch exists on the host. The response already says `processing`, and a completed repository's old index stays searchable until the new run completes. Don't call `/process` afterwards: it returns `409` while that run is active.
 
 ## 8. Reprocess
 
@@ -402,11 +406,13 @@ curl -sS -X POST -H "X-API-Key: $CODESAGE_API_KEY" \
   "$BASE/api/v1/repositories/2/process?force_reprocess=true"
 ```
 
+Add `incremental=true` to re-parse and re-index only the files that changed since the last run. It implies `force_reprocess`. Every file is still downloaded, and unchanged files keep their entities and records.
+
 ```json title="202 Accepted"
 {"message": "Processing started for repository 2", "repository_id": 2}
 ```
 
-The status is `processing` as soon as the call returns, so a poll never reads the old `failed`. The run replaces the old index only after it has fetched the new files. Go back to step 3 or 4 to follow it.
+A `failed` or `pending` repository reads `processing` as soon as the call returns, so a poll never reads the old `failed`. A `completed` one reads `completed` until the job starts a moment later. The run replaces the old index only after it has stored and indexed everything, and if it fails, the repository stays `completed` with its old index and `error_message` says `Reprocessing failed: <reason>. Search still uses the previous index.` Go back to step 3 or 4 to follow it.
 
 Without the flag on a completed repository:
 

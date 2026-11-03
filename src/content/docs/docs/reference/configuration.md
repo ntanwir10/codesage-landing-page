@@ -60,14 +60,14 @@ Without Algolia credentials the backend still starts. Adding or reprocessing a r
 | Variable | Default | Type | Effect |
 | --- | --- | --- | --- |
 | `ENABLE_RATE_LIMITING` | `true` | boolean | `false` switches every limit off |
-| `RATE_LIMIT_DEFAULT` | `100/minute` | limit string | Repository create, repository process and search suggestions |
+| `RATE_LIMIT_DEFAULT` | `100/minute` | limit string | Repository create, repository process, index freshness and search suggestions |
 | `RATE_LIMIT_AI` | `30/minute` | limit string | MCP tool calls and MCP resource reads |
 | `EMBEDDING_API_URL` | `https://api.openai.com/v1/embeddings` | URL | Semantic search, bring your own key: any OpenAI-compatible embeddings endpoint (OpenAI, Voyage, a gateway, or a local Ollama at `http://localhost:11434/v1/embeddings`) |
 | `EMBEDDING_API_KEY` | unset | string | Turns semantic search on. Each run then embeds its definitions (not imports), and definitions and queries are sent to that provider. Ollama accepts any value |
 | `EMBEDDING_MODEL` | `text-embedding-3-small` | string | The embedding model. Changing it re-embeds on the next run, since vectors from different models don't compare |
 | `REFRESH_INTERVAL_MINUTES` | `0` (off) | number | Every N minutes, check each completed repository's branch (the freshness check, cached 10 minutes) and run an [incremental reindex](/docs/concepts/indexing-pipeline/) of those that moved. A `422` from the check, as after a force-push, also starts one. Busy repositories are skipped |
 
-A limit string is `<count>/<period>`, for example `100/minute` or `5/second`. Limits are counted per client address. Behind nginx, uvicorn takes the address from `X-Forwarded-For` in the production image. Repository update and delete, the WebSocket and the read routes have no limit. A rejected request gets `429` with a `Retry-After` header. See [Error shapes](/docs/reference/rest-api/#429-with-retry-after).
+A limit string is `<count>/<period>`, for example `100/minute` or `5/second`. Limits are counted per client address. Behind nginx, uvicorn takes the address from `X-Forwarded-For` in the production image. Repository update and delete, the WebSocket and the other read routes have no limit. A rejected request gets `429` with a `Retry-After` header. See [Error shapes](/docs/reference/rest-api/#429-with-retry-after).
 
 ### MCP server description
 
@@ -83,7 +83,7 @@ These three are not in `.env.example`. The bridge advertises its own fixed name 
 
 - **Booleans.** `true`/`false`, `1`/`0`, `yes`/`no` and `on`/`off` are accepted, in any case.
 - **Empty values.** An empty `ALGOLIA_APP_ID`, `ALGOLIA_ADMIN_API_KEY` or `CODESAGE_API_KEY` counts as unset, because the code tests for truthiness.
-- **Placeholders.** For `ALGOLIA_APP_ID`, `ALGOLIA_ADMIN_API_KEY` and `GITHUB_TOKEN` only, a value that matches `your-...-here` (for example `your-algolia-app-id-here`) is converted to unset. This covers an `.env` copied from an old example. No other variable gets this treatment. A `CODESAGE_API_KEY` of `your-key-here` would be used as the key.
+- **Placeholders.** For `ALGOLIA_APP_ID`, `ALGOLIA_ADMIN_API_KEY`, `GITHUB_TOKEN` and `EMBEDDING_API_KEY` only, a value that matches `your-...-here` (for example `your-algolia-app-id-here`) is converted to unset. This covers an `.env` copied from an old example. The backend treats no other variable this way: a `CODESAGE_API_KEY` of `your-key-here` would be used as the key. `make setup`, `make start` and the `make install-*` targets replace such a placeholder with a generated key, so only a backend started before any of them uses it.
 
 ## Startup validation
 
@@ -101,7 +101,7 @@ Two combinations only log a warning.
 | No key, loopback host | `CODESAGE_API_KEY is not set; write endpoints are unauthenticated (acceptable on loopback only)` |
 | Key set, `ALLOWED_HOSTS` contains `*` | `ALLOWED_HOSTS contains '*'; any Host is served, so DNS rebinding is not blocked` |
 
-After validation, the backend runs database migrations, marks any repository left `pending` or `processing` by a previous process as `failed`, and logs whether Algolia is configured. A missing Algolia configuration logs an error but does not stop the server.
+After validation, the backend runs database migrations, starts every repository left `pending` or `processing` by a previous process again as a full run (with external workers, repositories whose job a worker owns are left to the workers), and logs whether Algolia is configured. A missing Algolia configuration logs an error but does not stop the server.
 
 ## Request guard rules that depend on settings
 
@@ -160,6 +160,7 @@ Both Compose files read `backend/.env` through `env_file`, then override some va
 | `CODESAGE_API_KEY` | From `backend/.env` | `${CODESAGE_API_KEY:-}` from your shell |
 | `ENVIRONMENT` | not set (`development`) | `production` |
 | `ALLOWED_HOSTS` | not set | `${ALLOWED_HOSTS:-}` from your shell |
+| `INDEX_WORKERS` | `${INDEX_WORKERS:-inline}` from your shell, so a value in `backend/.env` has no effect | not set (from `backend/.env`, default `inline`). The prod file has no worker service, so `external` there needs workers you run yourself, or repositories stay `pending` |
 
 Variables you export in your shell before `make up` or `make prod-up`:
 
@@ -169,6 +170,7 @@ Variables you export in your shell before `make up` or `make prod-up`:
 | `DOCKER_ALGOLIA_INDEX_NAME` | Dev | Overrides `codesage_code_entities_docker` |
 | `PROD_ALGOLIA_INDEX_NAME` | Prod | Overrides `codesage_code_entities_prod` |
 | `ALLOWED_HOSTS` | Prod | Extra hostnames or IPs the site is reached by, comma-separated, no port |
+| `INDEX_WORKERS` | Dev | `external` makes the backend only queue jobs. Start the workers with the `workers` profile: `INDEX_WORKERS=external docker compose -f deployment/docker-compose.yml --profile workers up -d --scale worker=2` |
 
 Each stack uses its own index, and neither matches the local default `codesage_code_entities`. Two databases sharing one index delete each other's records, because records are keyed by repository ID.
 
