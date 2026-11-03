@@ -65,6 +65,7 @@ Without Algolia credentials the backend still starts. Adding or reprocessing a r
 | `EMBEDDING_API_URL` | `https://api.openai.com/v1/embeddings` | URL | Semantic search, bring your own key: any OpenAI-compatible embeddings endpoint (OpenAI, Voyage, a gateway, or a local Ollama at `http://localhost:11434/v1/embeddings`; from the Docker stacks it is `http://host.docker.internal:11434/v1/embeddings`, since `localhost` is the container) |
 | `EMBEDDING_API_KEY` | unset | string | Turns semantic search on. Each run then embeds its definitions (not imports), and definitions and queries are sent to that provider. Ollama accepts any value |
 | `EMBEDDING_MODEL` | `text-embedding-3-small` | string | The embedding model. Changing it re-embeds on the next run, since vectors from different models don't compare |
+| `GITHUB_WEBHOOK_SECRET` | unset (off) | string | The secret of a GitHub push webhook pointed at `/api/v1/webhooks/github`. A signed push to an indexed branch starts the same incremental run as the scheduled refresh; see [REST API](/docs/reference/rest-api/). Unset, the endpoint answers `404` |
 | `REFRESH_INTERVAL_MINUTES` | `0` (off) | number | Every N minutes, check each completed repository's branch (the freshness check, cached 10 minutes) and run an [incremental reindex](/docs/concepts/indexing-pipeline/) of those that moved. A `422` from the check, as after a force-push, also starts one. Busy repositories are skipped |
 
 A limit string is `<count>/<period>`, for example `100/minute` or `5/second`. Limits are counted per client address. Behind nginx, uvicorn takes the address from `X-Forwarded-For` in the production image. Repository update and delete, the WebSocket and the other read routes have no limit. A rejected request gets `429` with a `Retry-After` header. See [Error shapes](/docs/reference/rest-api/#429-with-retry-after).
@@ -228,6 +229,9 @@ LOG_LEVEL=INFO
 
 # --- Scheduled refresh (0 = off) ---------------------------------------------
 # REFRESH_INTERVAL_MINUTES=60
+
+# --- GitHub push webhook (unset = off; openssl rand -hex 32) --------------------
+# GITHUB_WEBHOOK_SECRET=
 ```
 
 The template `.env.example` lists `http://localhost:3000,http://localhost:5173` for `CORS_ORIGINS`, without 5174. The code default includes all three.

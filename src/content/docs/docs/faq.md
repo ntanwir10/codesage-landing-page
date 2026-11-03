@@ -85,7 +85,7 @@ No. The stored URL has no branch and must be unique, so a second add of the same
 
 ### How do I refresh an index after the repository changes?
 
-Reprocess it, or set `REFRESH_INTERVAL_MINUTES` so the backend checks each completed repository's branch on a schedule and runs an incremental reindex when it moved. There are no webhooks. Use **Reprocess** on the repository page, or:
+Reprocess it, or set `REFRESH_INTERVAL_MINUTES` so the backend checks each completed repository's branch on a schedule and runs an incremental reindex when it moved. For GitHub, a [push webhook](/docs/reference/rest-api/) (`GITHUB_WEBHOOK_SECRET`) starts that reindex as soon as you push. Use **Reprocess** on the repository page, or:
 
 ```bash
 curl -X POST "http://127.0.0.1:8001/api/v1/repositories/1/process?force_reprocess=true" \

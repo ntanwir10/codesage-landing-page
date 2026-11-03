@@ -23,6 +23,7 @@ The backend is a FastAPI app. The dashboard uses these routes, and you can call 
 | `GET /api/v1/repositories/{repository_id}/freshness` | No | 100/minute | Whether the index is behind its branch |
 | `GET /api/v1/repositories/{repository_id}/stats` | No | None | File, line and entity counts |
 | `POST /api/v1/repositories/{repository_id}/process` | Yes | 100/minute | Start or restart indexing |
+| `POST /api/v1/webhooks/github` | No, a signature instead | None | GitHub push webhook: start an incremental run for the pushed branch |
 | `GET /api/v1/ai/...` | Mixed | Mixed | See [MCP HTTP endpoints](/docs/reference/mcp-endpoints/) |
 | `WS /ws` | Yes | Connection caps | See [WebSocket](/docs/reference/websocket/) |
 
@@ -447,6 +448,29 @@ For a `pending` or `failed` repository the route sets the status to `processing`
 | `503` | `Search indexing is not configured on the server (Algolia credentials are missing).` |
 
 At most two runs execute at once. A third waits for a free slot while already showing `processing`.
+
+## `POST /api/v1/webhooks/github`
+
+A GitHub push webhook starts the same incremental run as the scheduled refresh, as soon as GitHub reports a push. It is off, answering `404`, until `GITHUB_WEBHOOK_SECRET` is set.
+
+**Setup.**
+1. Put a secret in `backend/.env` (the Docker stacks read the same file) and restart the backend:
+   ```bash
+   echo "GITHUB_WEBHOOK_SECRET=$(openssl rand -hex 32)" >> backend/.env
+   ```
+2. In the GitHub repository, open **Settings → Webhooks → Add webhook**:
+   - **Payload URL:** `https://<your-host>/api/v1/webhooks/github`
+   - **Content type:** `application/json`
+   - **Secret:** the same value
+   - **Events:** "Just the push event"
+
+**Behavior.**
+- **Signature.** `X-Hub-Signature-256` must be `sha256=` and the HMAC-SHA256 of the raw body with the secret. A missing or wrong signature gets `401`, before the body is read as JSON. No API key is needed, because GitHub can't send one.
+- **Matching.** A `push` to `refs/heads/<branch>` starts a run for each `completed` repository with that GitHub URL and branch. A repository with no branch follows the payload's `default_branch`, and the path match ignores case.
+- **What starts nothing.** Other branches, tags, `ping` and other events, and a push of the commit already indexed all get `202` and start nothing. A signed body that isn't a push payload gets `400`.
+- **Response.** `202 {"started": [ids], "busy": [ids]}` comes back at once, while the run goes on in the background. GitHub shows it under Recent Deliveries. A repository with a run already going is listed in `busy` and not queued; the next push, or the scheduled refresh, picks it up.
+- **Hosts and the prod stack.** The `Host` check still applies. With a key set, the host GitHub calls must be in `ALLOWED_HOSTS`. The prod nginx exempts this one path from basic auth, and its 2 MB body limit applies.
+- **Testing locally.** Without a key, only loopback clients that address the backend as `localhost` are served. A forwarder must post from the same machine to `http://localhost:8001/api/v1/webhooks/github` and pass the body through unchanged.
 
 ## Error shapes
 
