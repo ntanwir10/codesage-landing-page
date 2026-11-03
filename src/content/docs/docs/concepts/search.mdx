@@ -173,7 +173,7 @@ Imports are searched only when you ask for `entity_type: "import"`. An import li
 
 The language and entity type values go through `_escape_filter_value`, which escapes backslashes and double quotes. A value cannot close the quote and add a filter clause of its own.
 
-Without a repository, `search_code` searches every repository. That includes repositories being reprocessed, since the filter only knows about the ID. Until a reprocess completes, a hit can come from the previous run's records or the new run's. The previous run's records can also stay searchable for a short time after the run is `completed`, until Algolia applies the delete. See [Known limitations](/docs/limitations/).
+Without a repository, `search_code` searches every repository. That includes repositories being reprocessed, since the filter only knows about the ID. Between the moment a reprocess indexes its records and the moment it completes, a hit can come from the previous run's records or the new run's. That stretch is short: the run embeds before it indexes, and completes once Algolia has applied the delete. See [Known limitations](/docs/limitations/).
 
 ## Results and source links
 
@@ -216,12 +216,12 @@ With [`EMBEDDING_API_KEY`](/docs/reference/configuration/) set, every indexing r
 
 ## Waits and timeouts
 
-Indexing and deleting return a task ID. Algolia can leave a task unpublished indefinitely, so where CodeSage waits, it polls `get_task` itself with a deadline. Only indexing waits.
+Indexing and deleting return a task ID. Algolia can leave a task unpublished indefinitely, so where CodeSage waits, it polls `get_task` itself with a deadline. Indexing and the delete of the previous run's records wait.
 
 | Operation | Behaviour | Deadline |
 | --- | --- | --- |
 | Index records | Waits for each batch's task to be published | 300 s. On timeout it logs a warning and the run continues, because the records were accepted |
-| Delete the previous run's records | Sends `delete_by` after the new run is indexed, and does not poll | None. Algolia applies an index's tasks in order, and a timeout must not discard a good run. A failed request leaves a `Partially indexed` note |
+| Delete the previous run's records | Sends `delete_by` after the new run is indexed, and waits for it, so a `completed` repository never returns the previous run's records | 300 s. On timeout it logs a warning and the run completes, because Algolia applies the delete later. A failed request leaves a `Partially indexed` note |
 | Plain repository delete | Sends `delete_by` and does not poll | None. Algolia applies an index's tasks in order |
 | Index settings | Not waited on | None |
 | `/health` Algolia probe | a `GET 1/indexes` request (`custom_get`; v4's `list_indices` model rejects this API's response) in a worker thread | 5 s, and the result is cached for 30 s |

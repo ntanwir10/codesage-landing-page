@@ -59,8 +59,9 @@ The check makes one attempt per call. It has no retries and no rate-limit sleeps
     parse --> store["Store files and entities<br/>a failed batch is rolled back"]
     store --> more{"More files?"}
     more -- "yes" --> batch
-    more -- "no" --> index["Index the entities in Algolia"]
-    index --> swap["Delete the previous run's rows and records<br/>incremental: only for paths not reused"]
+    more -- "no" --> embed["Embed the definitions<br/>with an embeddings key"]
+    embed --> index["Index the entities in Algolia"]
+    index --> swap["Delete the previous run's rows and records<br/>incremental: only for paths not reused<br/>wait for Algolia to apply it"]
     swap --> skipped{"Anything left out?"}
     skipped -- "no" --> completed["completed"]
     skipped -- "yes" --> partial["completed<br/>error_message: Partially indexed"]
@@ -141,11 +142,13 @@ Why these numbers:
 
 9. **Parse and store.** Files are handled in batches of 200. For each file the run parses entities in a worker thread, builds a `CodeFile` row with its `CodeEntity` rows, and builds the Algolia records. The batch is committed in a worker thread, then `processed_files` is updated and progress is broadcast.
 
-10. **Index.** All new records go to Algolia in requests of 1000. The run fails if there are no records and nothing was reused ("No code entities were indexed from N files (F failed to process)") or if Algolia rejects a request ("Algolia rejected the indexing request").
-
-    **Incremental runs.** With `?incremental=true` or the [scheduled refresh](/docs/reference/configuration/), a file whose content and language match the previous run's is copied with its entities, without parsing, and keeps its Algolia records. Only changed and new files are parsed and indexed. Every file is still downloaded.
+10. **Index.** The run fails if there are no records and nothing was reused ("No code entities were indexed from N files (F failed to process)"). Otherwise it embeds, indexes, then swaps, in that order: from the moment the new records reach Algolia until the swap, search returns both runs' records, so that stretch holds no slow work.
 
     **Embed (bring your own key).** With [`EMBEDDING_API_KEY`](/docs/reference/configuration/) set, the run sends its definitions (not imports) that have no vector from the current model to the configured provider, 64 per request. Each text is the kind, name, path and the definition's lines. The vectors are stored in the database for semantic `search_code`. Reused files keep theirs, and a failing provider leaves a note in `error_message` without failing the run.
+
+    **Index.** All new records go to Algolia in requests of 1000. The run fails if Algolia rejects a request ("Algolia rejected the indexing request").
+
+    **Incremental runs.** With `?incremental=true` or the [scheduled refresh](/docs/reference/configuration/), a file whose content and language match the previous run's is copied with its entities, without parsing, and keeps its Algolia records. Only changed and new files are parsed and indexed. Every file is still downloaded.
 
     **Swap.** Once indexing succeeds, the previous run's rows are deleted. A full run deletes every record but its own. An incremental run deletes earlier records only for previous paths it didn't reuse (changed, removed, or not stored this time), 50 paths per request. A run where nothing changed writes nothing to Algolia and just moves `commit_sha`.
 
@@ -301,7 +304,7 @@ A `Partially indexed` note joins one or more of these causes with semicolons:
 - `search still holds old records for some changed or removed files until they change again or a full reprocess` (an incremental run's Algolia delete failed)
 - `search still holds the previous run's records until the next run` (a full run's Algolia delete failed)
 
-The Algolia wait is forgiving. If Algolia accepted the records but a task is not published after 300 s, the run logs a warning and carries on, because the records will become searchable shortly. The delete of the previous run's records is not waited on at all: Algolia applies an index's tasks in order, and a timeout must not throw away a good run. A delete request that fails leaves one of the last two notes above. Either way a full reprocess removes the leftover records. An incremental run only removes them for the paths it did not reuse.
+The Algolia wait is forgiving. If Algolia accepted the records but a task is not published after 300 s, the run logs a warning and carries on, because the records will become searchable shortly. The delete of the previous run's records is waited on the same way, so a `completed` repository's search never returns the previous run's records. A timeout is logged and the run still completes, because Algolia applies the delete later. A delete request that fails leaves one of the last two notes above. Either way a full reprocess removes the leftover records. An incremental run only removes them for the paths it did not reuse.
 
 Nothing retries a failed run by itself. Fix the cause (set `GITHUB_TOKEN`, repair the Algolia credentials, wait out a rate limit), then reprocess.
 
@@ -309,7 +312,7 @@ Nothing retries a failed run by itself. Fix the cause (set `GITHUB_TOKEN`, repai
 
 - **Delete.** A delete holds the repository's job slot while it works, so no run can start in the middle. It sends `delete_by` to Algolia and does not poll. That is safe because Algolia applies an index's tasks in order, so records indexed later under a reused id still land after the delete. If Algolia refuses the request, nothing is deleted and the API returns `502`.
 - **Delete order.** The service deletes entities, then files, with bulk queries, then the repository row. See [the data model](/docs/concepts/data-model/#cascades-and-delete-order).
-- **Reprocess.** A reprocess deletes nothing first. Its records carry a new `run_id`, so they never overwrite the previous run's. Only when it is complete does it delete the previous run's rows and send a `delete_by` for every record of the repository with another `run_id`, without waiting for it. Until then the old index stays searchable.
+- **Reprocess.** A reprocess deletes nothing first. Its records carry a new `run_id`, so they never overwrite the previous run's. Only when it is complete does it delete the previous run's rows and send a `delete_by` for every record of the repository with another `run_id`, and wait for Algolia to apply it. Until then the old index stays searchable.
 - **Editing.** `PUT /repositories/{id}` returns `409` if it would change `branch`, `language` or `framework` while a job or a delete holds the repository.
 
 ## Progress broadcasting
