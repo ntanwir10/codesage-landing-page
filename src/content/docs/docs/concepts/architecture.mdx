@@ -48,7 +48,7 @@ The split of work follows one rule: Algolia answers questions about meaning (whi
 An MCP client such as Claude Desktop, Cursor or VS Code starts stdio MCP servers as child processes and talks to them over stdin and stdout. The bridge is that child. It does not import the backend, open the database or hold an Algolia key. Two benefits follow:
 
 - **The backend can run anywhere.** The bridge only needs a URL (`MCP_SERVER_URL`), so the backend can live on another machine behind nginx.
-- **`tools/list` works with the backend down.** Tool names and argument models live in [`backend/codesage_mcp/schemas.py`](https://github.com/ntanwir10/codesage-algolia-challenge/blob/master/backend/codesage_mcp/schemas.py), which the backend imports too. That file may not import app, database, Algolia or settings code, so it loads anywhere. Only tool calls and resource reads need the backend.
+- **`tools/list` works with the backend down.** Tool names, argument models and result models live in [`backend/codesage_mcp/schemas.py`](https://github.com/ntanwir10/codesage-algolia-challenge/blob/master/backend/codesage_mcp/schemas.py), which the backend imports too. That file may not import app, database, Algolia or settings code, so it loads anywhere. Only tool calls and resource reads need the backend.
 
 The bridge validates arguments first (unknown arguments are rejected), then the backend validates them again. Requests time out after 30 s, and a connection attempt after 5 s. A failed connection is retried once. stdout carries the protocol only, and all logging goes to stderr.
 
