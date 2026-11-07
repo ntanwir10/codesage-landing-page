@@ -104,7 +104,7 @@ The dashboard sends the key as an `X-API-Key` header. Vite inlines every `VITE_*
 
 1. Delete the `CODESAGE_API_KEY` line in `backend/.env`.
 2. Run `make setup`. It generates a new key and updates `frontend/.env`.
-3. Run `make install-claude` (or your client's target). It rewrites the CodeSage entry in the client's config (and writes a new backup).
+3. A local install needs nothing more: the launcher reads the new key from `backend/.env` when the client starts the server. An entry that holds a key (one installed before the installer left local keys out, or made with `--api-key`) needs `make install-claude` (or your client's target) once more.
 4. Restart the backend, Vite and your MCP client. The backend reads `backend/.env` only at startup.
 
 ## Ports
