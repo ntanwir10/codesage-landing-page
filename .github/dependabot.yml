@@ -1,0 +1,12 @@
+# Weekly npm update PRs, each built by Vercel before merging. Minor and patch bumps arrive as
+# one PR; each major bump gets its own, since it can need changes to the site.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      minor-and-patch:
+        patterns: ["*"]
+        update-types: [minor, patch]
