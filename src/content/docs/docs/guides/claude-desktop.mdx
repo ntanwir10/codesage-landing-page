@@ -141,10 +141,11 @@ The launcher, `mcp_launcher.sh`, is a bash script that runs `.venv/bin/python`. 
 - **Refuses to overwrite a bad file.** If the config isn't valid JSON (`error: <path> is not valid JSON (...); refusing to overwrite it`) or isn't a JSON object, it exits with an error and changes nothing. An unreadable config, or a folder it can't write to, is a one-line error, checked before the Keychain is touched, so a failed run leaves no stray item.
 - **Warns when the client looks missing.** If the default config folder doesn't exist, it prints `warning: <folder> does not exist; <client> doesn't seem to be installed` and creates the folder anyway.
 - **Leaves a local key out.** For a local `http://` backend (`127.0.0.1`, `localhost` or `[::1]`) it writes no key: the launcher reads it from `backend/.env` each time the client starts the server, so a new key reaches the client without reinstalling, and the client's settings never show it. For any other URL it copies `CODESAGE_API_KEY` from `backend/.env`. `--api-key` wins either way. With `--basic-auth` it writes no key, because nginx adds it. Run directly for any other URL with no key found, it warns `no API key found (...); writing none`.
+- **Warns when Claude Desktop is running** (macOS). It still writes the config, but Claude Desktop keeps its config in memory and rewrites the file whenever it saves its own settings, which undoes the change. So it prints `warning: Claude Desktop is running, and its next settings save rewrites this file from memory, undoing this change. Quit Claude Desktop, run this again, then reopen it.`
 - **Rejects bad URLs.** `error: --server-url must be an http(s) URL with a host`, and, for a URL with a password, an error that points you to `--basic-auth USER`.
 - **Keeps passwords out of the config.** The `--basic-auth` password is read by `security` from a prompt, never from the command line, and is never written to the file.
 
-On success it prints `updated <config>: <servers key>.<name> -> <repo>/mcp_launcher.sh` and `Restart <client> to pick it up.`
+On success it prints `updated <config>: <servers key>.<name> -> <repo>/mcp_launcher.sh` and `Restart <client> to pick it up.` While Claude Desktop is running, the warning above takes the place of that last line.
 
 ## Install by hand
 
@@ -169,6 +170,14 @@ If the file already has other servers, add the `codesage` object inside the exis
 ### Other MCP clients
 
 Cursor and Windsurf take the same entry in their own files (see [Config file locations](#config-file-locations)). VS Code lists it under `servers` and adds `"type": "stdio"`. The bridge is a standard stdio MCP server, so any other client that runs stdio servers, such as Zed, takes the same `command` and `env` in its own format.
+
+Codex (its CLI and its app share `~/.codex/config.toml`) adds it with its own command. It rewrites the whole file in its own format, so back the file up first:
+
+```bash
+codex mcp add codesage --env MCP_SERVER_URL=http://127.0.0.1:8001 -- /absolute/path/to/codesage-algolia-challenge/mcp_launcher.sh
+```
+
+ChatGPT's desktop app connects only to remote MCP servers set up in ChatGPT's settings, so it can't run this local stdio bridge.
 
 ## The launcher
 
