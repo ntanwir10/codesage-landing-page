@@ -103,9 +103,9 @@ Pass installer options through `ARGS`: `make install-claude ARGS="--dry-run"`. S
 | `--config PATH` | Per client and OS, below | The config file to merge into |
 | `--name NAME` | `codesage` | The server's name in the config. A second name gives a second server entry |
 | `--server-url URL` | `$MCP_SERVER_URL`, else `http://127.0.0.1:8001` | Backend base URL. Must be `http(s)` with a host. A URL that contains a password is refused |
-| `--api-key KEY` | `CODESAGE_API_KEY` from `backend/.env` | Written into the entry's `env` block |
+| `--api-key KEY` | None for a local `http://` backend, whose key the launcher reads from `backend/.env`; otherwise `CODESAGE_API_KEY` from `backend/.env` | Written into the entry's `env` block |
 | `--basic-auth USER` | unset | For the production stack. Prompts for the password and stores it in the macOS Keychain (service `codesage-mcp`). No API key is written, because nginx supplies it. Needs the `security` command, so macOS only |
-| `--dry-run` | off | Prints only the CodeSage entry, with the key shown as `********`, and writes nothing |
+| `--dry-run` | off | Prints only the CodeSage entry, with any key shown as `********`, and writes nothing |
 
 | Client | Servers key | macOS | Windows | Linux |
 | --- | --- | --- | --- | --- |
@@ -139,7 +139,7 @@ What the installer does and refuses:
 - It refuses a config whose servers key (`mcpServers`, or `servers` for VS Code) is not an object.
 - It checks that the folder is writable before it touches the Keychain, so a failed run leaves no stray item.
 - It warns, and creates the folder, when the default config folder does not exist. It does not warn when you pass `--config`.
-- With no key found and no `--basic-auth`, it warns and writes an empty `CODESAGE_API_KEY`.
+- For a local `http://` backend it writes no key: the launcher reads it from `backend/.env`. For any other URL with no key found and no `--basic-auth`, it warns and writes none.
 
 ```bash title="Examples"
 make install-claude ARGS="--dry-run"

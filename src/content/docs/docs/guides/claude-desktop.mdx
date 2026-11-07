@@ -42,7 +42,7 @@ make install-claude                 # merge CodeSage into the Claude Desktop con
 make install-cursor                 # the same for Cursor
 make install-vscode                 # the same for VS Code
 make install-windsurf               # the same for Windsurf
-make install-claude ARGS=--dry-run  # print the CodeSage entry with the key masked; write nothing
+make install-claude ARGS=--dry-run  # print the CodeSage entry (any key masked); write nothing
 ```
 
 `make install-claude` runs `scripts/ensure_api_key.py` and then `scripts/install_claude_desktop.py $(ARGS)`; the other targets add `--client cursor`, `vscode` or `windsurf`. The installer uses only the Python standard library. Restart the client afterwards.
@@ -61,9 +61,9 @@ Through `make`, even `--dry-run` runs `ensure_api_key.py` first, which can creat
 | `--config PATH` | Per client and OS, see below | The config file to merge into. Passing it also silences the "doesn't seem to be installed" warning. |
 | `--name NAME` | `codesage` | The server's name in the config. A second name gives a second entry and its own log file. |
 | `--server-url URL` | `MCP_SERVER_URL` from your shell, else `http://127.0.0.1:8001` | Backend base URL. Must be an `http` or `https` URL with a host. A URL that contains a password is refused. |
-| `--api-key KEY` | `CODESAGE_API_KEY` from `backend/.env` | Written into the entry's `env` block. |
+| `--api-key KEY` | None for a local `http://` backend, whose key the launcher reads from `backend/.env`; otherwise `CODESAGE_API_KEY` from `backend/.env` | Written into the entry's `env` block. |
 | `--basic-auth USER` | unset | For the prod stack behind nginx. Prompts for the password and stores it in the macOS Keychain (service `codesage-mcp`). No API key is written. |
-| `--dry-run` | off | Prints only the CodeSage entry, with `CODESAGE_API_KEY` shown as `********`, and writes nothing. |
+| `--dry-run` | off | Prints only the CodeSage entry, with any `CODESAGE_API_KEY` shown as `********`, and writes nothing. |
 
 Options go through `ARGS`:
 
@@ -88,8 +88,7 @@ The output starts with `# dry run: would add mcpServers.codesage to <config path
     "codesage": {
       "command": "/path/to/codesage-algolia-challenge/mcp_launcher.sh",
       "env": {
-        "MCP_SERVER_URL": "http://127.0.0.1:8001",
-        "CODESAGE_API_KEY": "********"
+        "MCP_SERVER_URL": "http://127.0.0.1:8001"
       }
     }
   }
@@ -141,7 +140,7 @@ The launcher, `mcp_launcher.sh`, is a bash script that runs `.venv/bin/python`. 
 - **Protects the key.** Both files are written atomically (temp file, then rename) at mode 600, because they can hold the API key.
 - **Refuses to overwrite a bad file.** If the config isn't valid JSON (`error: <path> is not valid JSON (...); refusing to overwrite it`) or isn't a JSON object, it exits with an error and changes nothing. An unreadable config, or a folder it can't write to, is a one-line error, checked before the Keychain is touched, so a failed run leaves no stray item.
 - **Warns when the client looks missing.** If the default config folder doesn't exist, it prints `warning: <folder> does not exist; <client> doesn't seem to be installed` and creates the folder anyway.
-- **Reads the key from `backend/.env`.** `--api-key` wins. With `--basic-auth` it doesn't copy the backend's key, because nginx adds it, and the entry gets an empty `CODESAGE_API_KEY`. Run directly with no key and no `--basic-auth`, it warns `no API key found (...); writing it empty`.
+- **Leaves a local key out.** For a local `http://` backend (`127.0.0.1`, `localhost` or `[::1]`) it writes no key: the launcher reads it from `backend/.env` each time the client starts the server, so a new key reaches the client without reinstalling, and the client's settings never show it. For any other URL it copies `CODESAGE_API_KEY` from `backend/.env`. `--api-key` wins either way. With `--basic-auth` it writes no key, because nginx adds it. Run directly with no key and no `--basic-auth`, it warns `no API key found (...); writing it empty`.
 - **Rejects bad URLs.** `error: --server-url must be an http(s) URL with a host`, and, for a URL with a password, an error that points you to `--basic-auth USER`.
 - **Keeps passwords out of the config.** The `--basic-auth` password is read by `security` from a prompt, never from the command line, and is never written to the file.
 
@@ -149,7 +148,7 @@ On success it prints `updated <config>: <servers key>.<name> -> <repo>/mcp_launc
 
 ## Install by hand
 
-Copy `claude_desktop_config.example.json` into your Claude Desktop config. Set the **absolute** launcher path and your key (read it from `backend/.env`; don't paste it anywhere public):
+Copy `claude_desktop_config.example.json` into your Claude Desktop config. Set the **absolute** launcher path. For a local backend you can leave `CODESAGE_API_KEY` out, and the launcher reads it from `backend/.env`; for a remote one, set it (don't paste it anywhere public):
 
 ```json title="claude_desktop_config.json"
 {
@@ -216,7 +215,7 @@ In the prod Docker stack nginx asks for a login and adds the API key itself. Ins
 
 2. It prints `Enter the password for <user>; it is stored in the Keychain only.` and runs `security add-generic-password -U -s codesage-mcp -a <user> -w`. Type the password at the prompt. It never appears in the process arguments.
 
-3. The config entry gets `MCP_SERVER_URL`, an empty `CODESAGE_API_KEY` and `CODESAGE_BASIC_AUTH_USER`. The password stays in the Keychain.
+3. The config entry gets `MCP_SERVER_URL` and `CODESAGE_BASIC_AUTH_USER`, and no key. The password stays in the Keychain.
 
 4. Restart the client. At each start the launcher reads the password from the Keychain.
 
