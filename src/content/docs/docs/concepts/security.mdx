@@ -79,6 +79,7 @@ With no key configured, `api_key_is_valid` accepts every request. That is allowe
 | Condition | Check |
 | --- | --- |
 | No key configured | The `Host` must be `localhost`, `127.0.0.1` or `[::1]`, and the TCP peer must be a loopback address. This blocks DNS rebinding and LAN clients when the server was bound to `0.0.0.0` by hand |
+| `READ_ONLY=true` and no key | Checked like a keyed server: the `Host` must be loopback, a `CORS_ORIGINS` host or in `ALLOWED_HOSTS`, and there is no loopback-peer check. Every write is refused first, with `403`, whatever the key |
 | Key configured | The `Host` must be loopback, a host named in `CORS_ORIGINS`, or listed in `ALLOWED_HOSTS` (`*.example.com` allows subdomains, `*` allows any host and logs a warning) |
 | Request without a `Host` header | Allowed when a key is set, since browsers always send one (an HTTP/1.0 client, for example). Refused when no key is set |
 | `/health` | Exempt from the `Host` check, because load balancers often address it by IP |
@@ -106,7 +107,7 @@ DNS rebinding re-points a hostile page's domain at your machine after the page h
 `validate_runtime_settings` runs when the app starts and refuses to start (a `RuntimeError`, so the process exits) if:
 
 - `CORS_ORIGINS` contains `*`. Credentials are allowed, so a wildcard origin would let any site make credentialed requests.
-- `CODESAGE_API_KEY` is unset and `MCP_SERVER_HOST` is not a loopback address. This is why the containers, which bind `0.0.0.0`, cannot start without a key.
+- `CODESAGE_API_KEY` is unset, `READ_ONLY` is off, and `MCP_SERVER_HOST` is not a loopback address. This is why the containers, which bind `0.0.0.0`, cannot start without a key.
 
 It only warns when:
 

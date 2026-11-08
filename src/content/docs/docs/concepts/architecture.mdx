@@ -6,7 +6,7 @@ description: How the CodeSage backend, bridge, dashboard and proxies fit togethe
 import { Aside, Badge, FileTree } from '@astrojs/starlight/components';
 import Mermaid from '~/components/Mermaid.astro';
 
-CodeSage is a self-hosted tool. There is no hosted demo: you run the backend on your own machine or server, with your own Algolia account. Everything that does work runs inside one FastAPI process, unless you move indexing out to worker processes. The other parts are clients (the dashboard, the MCP bridge) or proxies (nginx) that talk to that process.
+CodeSage is a self-hosted tool: you run the backend on your own machine or server, with your own Algolia account. The [public demo](/docs/guides/public-demo/) is one such backend, read-only. Everything that does work runs inside one FastAPI process, unless you move indexing out to worker processes. The other parts are clients (the dashboard, the MCP bridge) or proxies (nginx) that talk to that process.
 
 This page explains what each part is, why it was built that way, and what happens in order when the server starts, when a request arrives and when an MCP client calls a tool. For the numbers behind indexing, read [the indexing pipeline](/docs/concepts/indexing-pipeline/). For the index itself, read [search](/docs/concepts/search/).
 

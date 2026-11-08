@@ -16,6 +16,7 @@ The stdio bridge turns each MCP request into an HTTP call under `/api/v1/ai`. Yo
 | `POST /api/v1/ai/mcp/tools/call` | Yes | `RATE_LIMIT_AI` (30/minute) | Run one tool |
 | `GET /api/v1/ai/mcp/resources` | No | None | List resources |
 | `GET /api/v1/ai/mcp/resources/read?uri=...` | Yes | `RATE_LIMIT_AI` (30/minute) | Read one resource |
+| `POST /mcp` | Yes, or `Authorization: Bearer` | `RATE_LIMIT_AI` (30/minute), every request | MCP itself over streamable HTTP, for clients that connect to a URL. See [MCP over HTTP](/docs/guides/public-demo/#connect-an-mcp-client-over-http) |
 | `GET /api/v1/ai/search/suggestions` | Yes | `RATE_LIMIT_DEFAULT` (100/minute) | Distinct entity names for auto-complete, by keyword or by meaning |
 
 The key is only compared when one is configured. With no `CODESAGE_API_KEY` on a loopback install, every endpoint accepts any request from a local client. See [Security](/docs/concepts/security/).
