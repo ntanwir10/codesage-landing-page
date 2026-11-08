@@ -144,9 +144,9 @@ Per client address: 30 per minute for MCP tool calls and resource reads, and 100
 
 Yes, with the prod Docker stack: HTTPS on port 443, basic auth in nginx and the API key held by nginx. The backend refuses to start on a non-loopback `MCP_SERVER_HOST` without `CODESAGE_API_KEY`. Add any extra hostnames to `ALLOWED_HOSTS` or they get `403`. The stack was last run by hand; CI builds the images but never starts them. See [Production deployment](/docs/guides/production/).
 
-### Why only one worker?
+### Can the API run as more than one process?
 
-WebSocket subscriptions and rate-limit counters live in the API process's memory, and so do job state and the two-runs-at-once limit in the default inline mode. A second API process would not see the first one's runs or subscriptions. Both Compose stacks run exactly one. To spread the indexing, set `INDEX_WORKERS=external` and run `python -m app.worker` processes, which take jobs from the `jobs` table. See [Configuration](/docs/reference/configuration/).
+Yes, with Redis and external workers. Rate-limit counters live in each API process's memory, and so do job state and the two-runs-at-once limit in the default inline mode. So `API_WORKERS` above 1 needs `INDEX_WORKERS=external` (jobs go to the `jobs` table, which `python -m app.worker` processes take them from) and `RATE_LIMIT_STORAGE_URL=redis://…`. The backend refuses to start without them. The prod Compose `scale` profile adds Redis and the workers. See [More than one API process](/docs/guides/production/#more-than-one-api-process).
 
 ### What happens if the backend restarts during indexing?
 

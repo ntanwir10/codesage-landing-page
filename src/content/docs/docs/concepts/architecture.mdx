@@ -130,7 +130,7 @@ The same backend sits behind three different front doors, depending on how you r
 <Mermaid caption="The production request path. Only nginx is published. The backend trusts the headers nginx sets because nothing else can reach it." code={`flowchart TB
     browser(["Browser"]) --> https["nginx :443<br/>HTTPS, basic auth"]
     https -- "static files" --> spa["Built dashboard"]
-    https -- "/api and /ws<br/>adds X-API-Key" --> backend["backend :8001<br/>one uvicorn worker"]
+    https -- "/api and /ws<br/>adds X-API-Key" --> backend["backend :8001<br/>API_WORKERS uvicorn processes"]
     backend --> db[("SQLite volume")]
     backend --> algolia[("Algolia")]
     browser -. "plain HTTP" .-> http["nginx :80<br/>/health and a redirect"]
@@ -139,30 +139,30 @@ The same backend sits behind three different front doors, depending on how you r
 
 Why the two Docker stacks differ: in the dev stack the dashboard is a static bundle that has to authenticate itself, so the key goes into the bundle and the ports are limited to loopback. In the prod stack the human authenticates to nginx, and nginx authenticates to the backend. The browser never holds the key. The trade-off is that prod needs a certificate and a password file. The details are in [Docker dev stack](/docs/guides/docker/) and [Production deployment](/docs/guides/production/).
 
-## Process model: one worker, on purpose
+## Process model
 
-Both stacks run exactly one uvicorn worker (`--workers 1` in `backend/Dockerfile.prod`, no `--workers` in dev). This is a design constraint, not a default you can raise. Four things live in the process:
+The dev stack runs one uvicorn process. The prod image runs `API_WORKERS` of them (`--workers $API_WORKERS` in `backend/Dockerfile.prod`, 1 by default). Four things live in each process:
 
-| State | Where it lives | What breaks with two workers |
+| State | Where it lives | With more than one API process |
 | --- | --- | --- |
-| Job table (`_jobs`) | A module-level dict of asyncio tasks in `repository_service.py` (inline mode) | Two workers could index the same repository at once, or one would not see the other's job |
-| Run slots | An `asyncio.Semaphore(2)` per event loop | The limit of 2 runs would become 2 per worker |
-| WebSocket subscribers | `WebSocketManager` in `websocket_service.py` | A client subscribed on worker A never hears a broadcast made on worker B |
-| Rate-limit counters | slowapi in-memory storage | Each worker would count separately, so the real limit would be a multiple |
+| Job table (`_jobs`) | A module-level dict of asyncio tasks in `repository_service.py` (inline mode) | Unused: more than one process requires `INDEX_WORKERS=external`, where the `jobs` table is the queue. Its unique index on `repository_id` lets only one process queue a repository |
+| Run slots | An `asyncio.Semaphore(2)` per event loop | Unused for the same reason; each worker process runs one job at a time |
+| WebSocket subscribers | `WebSocketManager` in `websocket_service.py` | Each process serves its own clients. With external workers every API process reads progress back from the database (`relay_progress`), so every client hears every run |
+| Rate-limit counters | slowapi storage, memory by default | More than one process requires `RATE_LIMIT_STORAGE_URL=redis://…`, so every process counts in one place |
 
-SQLite adds a fifth reason: it allows one writer at a time. WAL mode lets readers work during a write, but it does not allow two writers.
+The backend refuses to start with `API_WORKERS` above 1 unless `INDEX_WORKERS=external` and `RATE_LIMIT_STORAGE_URL` are set. Processes starting together take turns applying the migrations, under a Postgres advisory lock or a lock file next to the SQLite database. SQLite allows one writer at a time: WAL mode lets readers work during a write, and the writers take turns. For heavy write load, or processes on more than one machine, use Postgres.
 
-Indexing can still move out. With `INDEX_WORKERS=external`, the API only queues jobs in the `jobs` table, and any number of `python -m app.worker` processes claim them, one job at a time each, with a heartbeat. The API process still owns WebSocket subscriptions and rate limits, so it stays at one worker. See [Configuration](/docs/reference/configuration/).
+Indexing can move out with one API process too. With `INDEX_WORKERS=external`, the API only queues jobs in the `jobs` table, and any number of `python -m app.worker` processes claim them, one job at a time each, with a heartbeat. See [Configuration](/docs/reference/configuration/).
 
-Inside that one process, blocking work is moved off the event loop so the API, WebSocket and tool calls stay responsive while a repository indexes:
+Inside each process, blocking work is moved off the event loop so the API, WebSocket and tool calls stay responsive while a repository indexes:
 
 - Parsing runs in a worker thread (`asyncio.to_thread`).
 - The Algolia client (v4 `SearchClientSync`) is synchronous, so each call runs in a worker thread too.
 - Database commits for a batch and the bulk deletes of a run's old rows run in worker threads.
 - `find_patterns` regex scans run in a thread with a per-file and a per-call time budget.
 
-<Aside type="caution">
-Do not add `--workers`. Moving to more than one worker needs job state, subscriptions and rate limits to move out of process first, and a database that accepts concurrent writers. See [Known limitations](/docs/limitations/).
+<Aside>
+To run more than one API process, follow [More than one API process](/docs/guides/production/#more-than-one-api-process).
 </Aside>
 
 The prod image also starts uvicorn with `--forwarded-allow-ips "*"`. That makes uvicorn trust `X-Forwarded-For` and `X-Forwarded-Proto` from any peer. It is safe only because the backend has no published port and nginx overwrites both headers. If you ever publish the backend port, remove that flag.
@@ -240,7 +240,7 @@ Backend versions are pinned in [`backend/requirements.txt`](https://github.com/n
     - main.py
     - worker.py the external indexing worker
   - codesage_mcp/ stdio MCP bridge (server.py, schemas.py)
-  - alembic/versions/ baseline.py, cleanup.py, drop_unused_columns.py, commit_sha.py, entity_embeddings.py, jobs.py
+  - alembic/versions/ baseline.py, cleanup.py, drop_unused_columns.py, commit_sha.py, entity_embeddings.py, jobs.py, unique_jobs.py
   - tests/ pytest suite
   - Dockerfile
   - Dockerfile.prod

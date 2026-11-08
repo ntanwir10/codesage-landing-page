@@ -54,6 +54,7 @@ Without Algolia credentials the backend still starts. Adding or reprocessing a r
 | --- | --- | --- | --- |
 | `DATABASE_URL` | `sqlite:///./codesage.db` | URL | SQLite by default; file databases use WAL mode with foreign keys on. Postgres with `postgresql://user:password@host:5432/db` (mapped to the bundled psycopg 3 driver). Migrations run at startup on either. Use Postgres for workers on more than one machine |
 | `INDEX_WORKERS` | `inline` | `inline` or `external` | Who runs indexing jobs. `inline`: the API process. `external`: the API only queues them in the `jobs` table, and `python -m app.worker` processes run them (start them after the API, which applies the migrations). A worker silent for 5 minutes has its job queued again |
+| `API_WORKERS` | `1` | integer, at least 1 | API processes: `Dockerfile.prod` passes it to uvicorn's `--workers`. Above 1 needs `INDEX_WORKERS=external` and `RATE_LIMIT_STORAGE_URL`, or the backend refuses to start. Processes starting together take turns applying the migrations, under a Postgres advisory lock or a `<database>-lock` file next to the SQLite database |
 | `SQL_ECHO` | `false` | boolean | `true` logs every SQL statement |
 
 ### Rate limits
@@ -63,6 +64,7 @@ Without Algolia credentials the backend still starts. Adding or reprocessing a r
 | `ENABLE_RATE_LIMITING` | `true` | boolean | `false` switches every limit off |
 | `RATE_LIMIT_DEFAULT` | `100/minute` | limit string | Repository create, repository process, index freshness and search suggestions |
 | `RATE_LIMIT_AI` | `30/minute` | limit string | MCP tool calls and MCP resource reads |
+| `RATE_LIMIT_STORAGE_URL` | unset (this process's memory) | URL | Where the counters live. `redis://host:6379` shares them between API processes, so a client gets one limit, not one per process |
 | `EMBEDDING_API_URL` | `https://api.openai.com/v1/embeddings` | URL | Semantic search, bring your own key: any OpenAI-compatible embeddings endpoint (OpenAI, Voyage, a gateway, or a local Ollama at `http://localhost:11434/v1/embeddings`; from the Docker stacks it is `http://host.docker.internal:11434/v1/embeddings`, since `localhost` is the container) |
 | `EMBEDDING_API_KEY` | unset | string | Turns semantic search on. Each run then embeds its definitions (not imports), and definitions and queries are sent to that provider. Ollama accepts any value |
 | `EMBEDDING_MODEL` | `text-embedding-3-small` | string | The embedding model. Changing it re-embeds on the next run, since vectors from different models don't compare |
@@ -89,11 +91,12 @@ These three are not in `.env.example`. The bridge advertises its own fixed name 
 
 ## Startup validation
 
-The backend checks its settings before it serves anything. Two combinations stop it, with a `RuntimeError` and no server.
+The backend checks its settings before it serves anything. These combinations stop it, with a `RuntimeError` and no server.
 
 | Condition | Message |
 | --- | --- |
 | `CORS_ORIGINS` contains `*` | `CORS_ORIGINS must not contain '*' because credentials are allowed; list the allowed origins explicitly` |
+| `API_WORKERS` above 1 without `INDEX_WORKERS=external`, or without a non-memory `RATE_LIMIT_STORAGE_URL` while rate limiting is on | `API_WORKERS=2 needs INDEX_WORKERS=external and RATE_LIMIT_STORAGE_URL (redis://...); or set API_WORKERS=1`, naming only what is missing |
 | `CODESAGE_API_KEY` is unset and `MCP_SERVER_HOST` is not loopback | `CODESAGE_API_KEY is required when MCP_SERVER_HOST is not a loopback address (host is '0.0.0.0')` |
 
 Two combinations only log a warning.
@@ -162,7 +165,9 @@ Both Compose files read `backend/.env` through `env_file`, then override some va
 | `CODESAGE_API_KEY` | From `backend/.env` | `${CODESAGE_API_KEY:-}` from your shell |
 | `ENVIRONMENT` | not set (`development`) | `production` |
 | `ALLOWED_HOSTS` | not set | `${ALLOWED_HOSTS:-}` from your shell |
-| `INDEX_WORKERS` | `${INDEX_WORKERS:-inline}` from your shell, so a value in `backend/.env` has no effect | not set (from `backend/.env`, default `inline`). The prod file has no worker service, so `external` there needs workers you run yourself, or repositories stay `pending` |
+| `INDEX_WORKERS` | `${INDEX_WORKERS:-inline}` from your shell, so a value in `backend/.env` has no effect | `${INDEX_WORKERS:-inline}` from your shell. `external` needs the `scale` profile's workers, or repositories stay `pending` |
+| `API_WORKERS` | not set (`1`) | `${API_WORKERS:-1}` from your shell |
+| `RATE_LIMIT_STORAGE_URL` | not set (memory) | `${RATE_LIMIT_STORAGE_URL:-}` from your shell |
 
 Variables you export in your shell before `make up` or `make prod-up`:
 
@@ -172,7 +177,8 @@ Variables you export in your shell before `make up` or `make prod-up`:
 | `DOCKER_ALGOLIA_INDEX_NAME` | Dev | Overrides `codesage_code_entities_docker` |
 | `PROD_ALGOLIA_INDEX_NAME` | Prod | Overrides `codesage_code_entities_prod` |
 | `ALLOWED_HOSTS` | Prod | Extra hostnames or IPs the site is reached by, comma-separated, no port |
-| `INDEX_WORKERS` | Dev | `external` makes the backend only queue jobs. Start the workers with the `workers` profile: `INDEX_WORKERS=external docker compose -f deployment/docker-compose.yml --profile workers up -d --scale worker=2` |
+| `INDEX_WORKERS` | Dev and prod | `external` makes the backend only queue jobs. Start the workers with the dev `workers` profile: `INDEX_WORKERS=external docker compose -f deployment/docker-compose.yml --profile workers up -d --scale worker=2`, or the prod `scale` profile |
+| `API_WORKERS`, `RATE_LIMIT_STORAGE_URL` | Prod | More than one API process, with the `scale` profile's Redis: see [More than one API process](/docs/guides/production/#more-than-one-api-process) |
 
 Each stack uses its own index, and neither matches the local default `codesage_code_entities`. Two databases sharing one index delete each other's records, because records are keyed by repository ID.
 
@@ -222,6 +228,8 @@ LOG_LEVEL=INFO
 # ENABLE_RATE_LIMITING=true
 # RATE_LIMIT_DEFAULT=100/minute
 # RATE_LIMIT_AI=30/minute
+# Where the counters live: unset is this process's memory; Redis shares them between API processes
+# RATE_LIMIT_STORAGE_URL=redis://localhost:6379
 
 # --- Semantic search, bring your own key (off while the key is empty) -------
 # EMBEDDING_API_URL=https://api.openai.com/v1/embeddings

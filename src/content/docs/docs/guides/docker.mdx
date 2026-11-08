@@ -81,7 +81,7 @@ To connect an MCP client to this stack, run `make install-claude` (or `install-c
 | Health check | `curl -f http://localhost:8001/health` every 30 s, 10 s timeout, 3 retries | None. It only waits for the backend container to start |
 | Restart | `unless-stopped` | `unless-stopped` |
 
-The backend starts with `uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload --reload-dir app`. It has no `--workers` option, which means exactly one worker. Job state, WebSocket subscriptions and rate-limit counters live in the process, and SQLite allows one writer. See [Architecture](/docs/concepts/architecture/#process-model-one-worker-on-purpose).
+The backend starts with `uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload --reload-dir app`. It has no `--workers` option, since `--reload` and `--workers` don't combine, so the dev stack runs one API process. The prod stack can run more; see [More than one API process](/docs/guides/production/#more-than-one-api-process) and [Architecture](/docs/concepts/architecture/#process-model).
 
 ### The nginx image build
 
