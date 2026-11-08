@@ -29,6 +29,14 @@ These clients were checked against it:
 
 On a read-only server, `tools/list` has seven tools: `add_repository` is left out. Every tool is marked read-only (`readOnlyHint`), so a client can run them without asking each time.
 
+### ChatGPT
+
+1. In ChatGPT, open Settings, then **Plugins**, then **Add**, then **Add custom MCP server**.
+2. Give it the URL `https://codesage-demo.vercel.app/mcp` and set Authentication to **No authentication**.
+3. Tick the risk notice and click **Create as a plugin**. The plugin then shows as connected, with authorization "None".
+
+ChatGPT's other choices are OAuth, which CodeSage doesn't serve, and both together. ChatGPT can't send a key or a basic-auth login, so it can connect only to a read-only server such as the demo. Its "Allow read-only tools" permission follows the tools' read-only marking.
+
 ### On your own server
 
 Every CodeSage backend has `/mcp`:
