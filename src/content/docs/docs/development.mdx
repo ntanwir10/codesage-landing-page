@@ -175,7 +175,7 @@ The schema is owned by Alembic. The models in `app/models/` are the source of tr
 
 </Steps>
 
-The server also runs migrations at start-up, so a new revision applies the next time the backend starts. The six existing revisions use short names (`baseline`, `cleanup`, `drop_unused_columns`, `commit_sha`, `entity_embeddings`, `jobs`) instead of hashes. See [Data model](/docs/concepts/data-model/#migrations) for what each does.
+The server also runs migrations at start-up, so a new revision applies the next time the backend starts. The seven existing revisions use short names (`baseline`, `cleanup`, `drop_unused_columns`, `commit_sha`, `entity_embeddings`, `jobs`, `unique_jobs`) instead of hashes. See [Data model](/docs/concepts/data-model/#migrations) for what each does.
 
 <Aside type="caution">
 A database that has the app tables but no `alembic_version` is stamped at `baseline` and then upgraded. If you rename or reorder revisions, that rule breaks for old databases.

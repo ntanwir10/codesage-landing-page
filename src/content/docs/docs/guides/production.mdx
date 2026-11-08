@@ -17,7 +17,7 @@ CI validates both Compose files and both nginx configs, builds the prod backend 
 <Mermaid caption="The prod stack. Only nginx is published. Port 80 serves /health and redirects everything else to HTTPS." code={`flowchart TB
     browser(["Browser"]) --> https["nginx :443<br/>HTTPS, basic auth"]
     https -- "static files" --> spa["Built dashboard"]
-    https -- "/api and /ws<br/>adds X-API-Key" --> backend["backend :8001<br/>one uvicorn worker"]
+    https -- "/api and /ws<br/>adds X-API-Key" --> backend["backend :8001<br/>API_WORKERS uvicorn processes"]
     backend --> db[("SQLite volume")]
     backend --> algolia[("Algolia")]
     browser -. "plain HTTP" .-> http["nginx :80<br/>/health and a redirect"]
@@ -31,7 +31,7 @@ On port 80, `/health` is proxied to the backend and everything else gets a `301`
 | | Dev | Prod |
 | --- | --- | --- |
 | Compose file | `deployment/docker-compose.yml` | `deployment/docker-compose.prod.yml` |
-| Backend image | `backend/Dockerfile`: source bind-mounted, uvicorn `--reload` | `backend/Dockerfile.prod`: multi-stage, no bind mount, `--workers 1`, `ENVIRONMENT=production` so `/docs` is off. Installs `curl` and `git` |
+| Backend image | `backend/Dockerfile`: source bind-mounted, uvicorn `--reload` | `backend/Dockerfile.prod`: multi-stage, no bind mount, `--workers $API_WORKERS` (1 by default), `ENVIRONMENT=production` so `/docs` is off. Installs `curl` and `git` |
 | nginx | `deployment/nginx.conf`, plain HTTP | `deployment/nginx.prod.conf.template`, HTTPS and basic auth |
 | Containers | `codesage_mcp_server`, `codesage_nginx` | `codesage_mcp_server_prod`, `codesage_nginx_prod` |
 | Published ports | `127.0.0.1:80` and `127.0.0.1:8001` | `80` and `443`. The backend is not published |
@@ -176,7 +176,22 @@ curl -k https://localhost/health                                       # prod he
 - **Data.** The SQLite file is in the named volume `backend_data_prod`, which survives `down`. To wipe it, run `down -v` with the prod file. That does not clean Algolia, so delete repositories in the dashboard first, or remove the index in Algolia.
 - **Upgrades.** Pull the new code, then `make prod-build` and `make prod-up`. Migrations run at start-up. If a run was in progress, the restart starts it again as a full run.
 - **Do not run dev and prod together.** Both publish port 80.
-- **One worker.** Do not change `--workers 1`. See [Known limitations](/docs/limitations/).
+- **More API processes.** Set `API_WORKERS` with the `scale` profile; see [More than one API process](#more-than-one-api-process).
+
+## More than one API process
+
+Job state and rate-limit counters live in each API process's memory, so more than one process needs indexing workers and Redis. The `scale` profile adds both: a `redis` service and a `worker` service (`python -m app.worker`) on the same image, database volume and Algolia index as the backend.
+
+```bash
+export API_WORKERS=2 INDEX_WORKERS=external RATE_LIMIT_STORAGE_URL=redis://redis:6379
+docker compose -f deployment/docker-compose.prod.yml --profile scale up -d --build --scale worker=2
+```
+
+- **Refused without them.** With `API_WORKERS` above 1 and either of the other two unset, the backend stops at start with a message that names what is missing, for example `API_WORKERS=2 needs RATE_LIMIT_STORAGE_URL (redis://...); or set API_WORKERS=1`.
+- **Shared limits.** Every process counts in Redis, so the 30 tool calls a minute hold per client however many processes there are. Redis keeps the counters in memory only. While it is down, rate-limited requests fail with `500` and `/health` stays `200`.
+- **Migrations.** The processes start together and take turns applying the migrations. Workers start once the backend is healthy.
+- **One job per repository.** If two processes queue the same repository at once, the second is told it is already being processed.
+- **SQLite.** The processes share one SQLite file, which takes one writer at a time. For heavy use, or processes on more than one machine, use Postgres (`DATABASE_URL`).
 
 ## Pre-flight checklist
 
