@@ -59,8 +59,10 @@ A read-only token is enough:
 | Bitbucket Cloud | `bitbucket.org=x-token-auth:<token>` | A repository, project or workspace access token with repository read access |
 | Gitea and Forgejo (such as Codeberg) | `codeberg.org=<user>:<token>` | An access token with repository read access |
 
+This was checked end to end with a private gitlab.com repository and a personal access token limited to `read_repository`. The repository indexed and could be searched and read. The token appeared in no log, no process's command line and no clone. Without the token, and with a wrong one, CodeSage gave the two refusals shown below.
+
 - **Checked at startup.** A malformed entry, a host listed twice, or `github.com` stops the backend from starting. The error names the entry's position, never its value. The token may contain `=` and `:` but not a comma.
-- **Sent to that host only.** git gets an `Authorization: Basic` header scoped to `https://<host>/`, through `GIT_CONFIG_*` environment variables rather than its command line. `ps` can't show it, and the clone's `.git/config` never holds it. The check, the clone and the freshness check all send it.
+- **Sent to that host only.** git gets an `Authorization: Basic` header scoped to `https://<host>/`, through `GIT_CONFIG_*` environment variables rather than its command line, which any user's `ps` can read. Only the same user and root can read a process's environment, and the clone's `.git/config` never holds it. The check, the clone and the freshness check all send it.
 - **No redirects.** With a token, git follows no redirects, so the header can't follow one either. git is given `https://<host>/<path>.git`, because gitlab.com redirects the path without `.git`. A repository that moved must be added at its current address.
 - **One token per host.** It is used for every repository on that host. The dashboard and `add_repository` can't pass a token of their own. A bad token fails that host's public repositories too.
 - **Needs git 2.31 or later**, for the environment variables. The backend images have it.

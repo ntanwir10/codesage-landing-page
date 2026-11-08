@@ -25,7 +25,7 @@ These clients were checked against it:
 | Claude Code | `claude mcp add --transport http codesage-demo https://codesage-demo.vercel.app/mcp` | `claude mcp get codesage-demo` shows Connected |
 | Gemini CLI | `gemini mcp add --transport http codesage-demo https://codesage-demo.vercel.app/mcp` | `gemini mcp list` shows Connected |
 | Qwen Code | `qwen mcp add --transport http codesage-demo https://codesage-demo.vercel.app/mcp` | `qwen mcp list` shows Connected |
-| Codex | `codex mcp add codesage-demo --url https://codesage-demo.vercel.app/mcp` | Codex accepts it as a streamable HTTP server, but its `mcp list` doesn't test the connection. Back up `~/.codex/config.toml` first, since Codex rewrites it |
+| Codex | `codex mcp add codesage-demo --url https://codesage-demo.vercel.app/mcp` | Its `mcp list` doesn't test the connection, but a `codex exec` run connects and lists the seven tools (the demo's log shows `codex-mcp-client`). Calling one hasn't been tested. Back up `~/.codex/config.toml` first, since Codex rewrites it |
 
 On a read-only server, `tools/list` has seven tools: `add_repository` is left out. Every tool is marked read-only (`readOnlyHint`), so a client can run them without asking each time.
 
@@ -34,6 +34,8 @@ On a read-only server, `tools/list` has seven tools: `add_repository` is left ou
 1. In ChatGPT, open Settings, then **Plugins**, then **Add**, then **Add custom MCP server**.
 2. Give it the URL `https://codesage-demo.vercel.app/mcp` and set Authentication to **No authentication**.
 3. Tick the risk notice and click **Create as a plugin**. The plugin then shows as connected, with authorization "None".
+
+Checked: asked to find `createStore`, ChatGPT called `search_code` and answered with zustand's `src/vanilla.ts`, lines 99–100.
 
 ChatGPT's other choices are OAuth, which CodeSage doesn't serve, and both together. ChatGPT can't send a key or a basic-auth login, so it can connect only to a read-only server such as the demo. Its "Allow read-only tools" permission follows the tools' read-only marking.
 
