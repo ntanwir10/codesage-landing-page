@@ -8,13 +8,13 @@ import Mermaid from '~/components/Mermaid.astro';
 
 An AI assistant can't see your codebase. You can paste a file into a chat, but it can't search a repository, list the functions in a directory or open the file a stack trace points at. CodeSage closes that gap. It reads a repository once, breaks it into searchable pieces and stores them in Algolia. After that, any MCP client, such as Claude Desktop, Cursor or VS Code, can search the code, read files, list definitions and count things, all through eight tools.
 
-CodeSage is a self-hosted tool. You run it on your own machine or server, with your own Algolia account. There is no hosted demo and no CodeSage service to sign up for. It was built for the [Algolia MCP Server Challenge](https://dev.to/challenges/algolia-2025-07-09).
+CodeSage is a self-hosted tool. You run it on your own machine or server, with your own Algolia account. There is no CodeSage service to sign up for, but a read-only [public demo](/docs/guides/public-demo/) lets you try it on three indexed repositories. It was built for the [Algolia MCP Server Challenge](https://dev.to/challenges/algolia-2025-07-09).
 
 ## What it does
 
 - **Indexes a repository.** CodeSage fetches the code files of a GitHub repository (or clones a public repository from another git host) and extracts functions, classes, methods, imports, Markdown doc sections and Terraform blocks. Each piece is called an entity.
 - **Stores two copies.** Full file contents and the entity list go into a local SQLite database. A searchable record per entity goes into your Algolia index.
-- **Serves MCP clients.** A small bridge program that your MCP client starts turns each tool call into an HTTP call to the CodeSage backend. Search goes to Algolia. Reading files and listing definitions go to SQLite.
+- **Serves MCP clients.** A small bridge program that your MCP client starts turns each tool call into an HTTP call to the CodeSage backend. Clients that connect to a URL instead use the backend's own MCP endpoint at `/mcp`. Search goes to Algolia. Reading files and listing definitions go to SQLite.
 - **Shows progress.** A React dashboard adds repositories from GitHub, GitLab, Bitbucket or any https git host, shows indexing live over a WebSocket and searches the index.
 
 ## Two ways in

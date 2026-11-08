@@ -7,7 +7,7 @@ description: Short, accurate answers to the questions people ask most about runn
 
 ### Is there a hosted version?
 
-No. CodeSage is self-hosted. You run the backend and dashboard yourself, with your own Algolia account. There is no hosted demo and no CodeSage service to sign up for. This documentation site is static pages only.
+No. CodeSage is self-hosted. You run the backend and dashboard yourself, with your own Algolia account. There is no CodeSage service to sign up for. A read-only [public demo](/docs/guides/public-demo/) lets you search three indexed repositories. This documentation site is static pages only.
 
 ### What does it cost?
 

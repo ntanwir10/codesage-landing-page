@@ -177,7 +177,7 @@ Codex (its CLI and its app share `~/.codex/config.toml`) adds it with its own co
 codex mcp add codesage --env MCP_SERVER_URL=http://127.0.0.1:8001 -- /absolute/path/to/codesage-algolia-challenge/mcp_launcher.sh
 ```
 
-ChatGPT's desktop app connects only to remote MCP servers set up in ChatGPT's settings, so it can't run this local stdio bridge.
+ChatGPT connects only to remote MCP servers set up in ChatGPT's settings, so it can't run this local stdio bridge. Clients like it use the backend's `/mcp` endpoint; see [Public demo and MCP over HTTP](/docs/guides/public-demo/).
 
 These clients were also checked against a local backend, with no key in their config. Back up the config file before adding the entry.
 

@@ -65,6 +65,8 @@ All of these use the dev Compose file except the two `prod-` targets. See [Docke
 | `make clean-all` | `$(COMPOSE) down -v --remove-orphans --rmi local` | Like `clean`, and you want the images gone too | The same, plus the locally built images. It never runs a host-wide prune |
 | `make prod-build` | `$(COMPOSE_PROD) build` | Preparing the production stack | Builds the production images |
 | `make prod-up` | `$(COMPOSE_PROD) up -d` | Starting the production stack | Starts nginx on ports 80 and 443. Needs `deployment/htpasswd`, `deployment/ssl/` and an exported `CODESAGE_API_KEY` |
+| `make demo-build` | `.venv/bin/python scripts/build_demo.py $(ARGS)` | Building the read-only demo for Vercel | Indexes the demo repositories into `build/demo/demo.db` and the `codesage_demo` Algolia index (only when the file is missing, or with `ARGS=--reindex`), then lays out `build/demo/` |
+| `make demo-deploy` | `cd build/demo && vercel deploy --prod --yes` | Publishing the demo | Deploys `build/demo/` to the linked Vercel project |
 
 ### Checks and tests
 

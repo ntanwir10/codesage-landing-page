@@ -25,7 +25,8 @@ Never commit `backend/.env`. It holds your Algolia admin key and the CodeSage AP
 | Variable | Default | Type | Effect |
 | --- | --- | --- | --- |
 | `CODESAGE_API_KEY` | unset | string | The shared key for write routes, the MCP tool call, resource reads, search suggestions and `/ws`. Sent as `X-API-Key`. Empty counts as unset. `make setup`, `make start` and `make install-claude` generate one when it is missing |
-| `MCP_SERVER_HOST` | `127.0.0.1` | string | Host used for startup validation, the OpenAPI `servers` entry and `python -m app.main`. A value other than `127.0.0.1`, `localhost` or `::1` requires `CODESAGE_API_KEY` |
+| `READ_ONLY` | `false` | boolean | `true` serves searches and reads to anyone on an allowed host (`CORS_ORIGINS`, `ALLOWED_HOSTS`) with no key, and refuses every write: adding, reprocessing, editing, deleting and the GitHub webhook get `403`, and `add_repository` is neither listed nor run. The database must already be at the latest migration; it is never migrated or written to, so a read-only SQLite file works. The dashboard swaps the add form for a notice and hides Reprocess and Delete. See [Public demo](/docs/guides/public-demo/) |
+| `MCP_SERVER_HOST` | `127.0.0.1` | string | Host used for startup validation, the OpenAPI `servers` entry and `python -m app.main`. A value other than `127.0.0.1`, `localhost` or `::1` requires `CODESAGE_API_KEY`, unless `READ_ONLY` is `true` |
 | `MCP_SERVER_PORT` | `8001` | integer | Port used for the OpenAPI `servers` entry and `python -m app.main` |
 | `ENVIRONMENT` | `development` | string | `production` turns off `/docs` and `/redoc`. `development` makes `python -m app.main` reload on change |
 | `LOG_LEVEL` | `INFO` | string | Python log level, case-insensitive. Logs are JSON lines |
