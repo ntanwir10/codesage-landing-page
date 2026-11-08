@@ -59,7 +59,7 @@ A read-only token is enough:
 | Bitbucket Cloud | `bitbucket.org=x-token-auth:<token>` | A repository, project or workspace access token with repository read access |
 | Gitea and Forgejo (such as Codeberg) | `codeberg.org=<user>:<token>` | An access token with repository read access |
 
-This was checked end to end with a private gitlab.com repository and a personal access token limited to `read_repository`. The repository indexed and could be searched and read. The token appeared in no log, in none of the process command lines sampled during the clone, and nowhere in the clone. Without the token, and with a wrong one, CodeSage gave the two refusals shown below.
+This was checked end to end with a private gitlab.com repository and a personal access token with the `read_api` scope. The repository indexed and could be searched and read. The token appeared in no log, in none of the process command lines sampled during the clone, and nowhere in the clone. Without the token, and with a wrong one, CodeSage gave the two refusals shown below. GitLab documents the narrower `read_repository` in the table as enough for git access, but that scope wasn't the one tested.
 
 - **Checked at startup.** A malformed entry, a host listed twice, or `github.com` stops the backend from starting. The error names the entry's position, never its value. The token may contain `=` and `:` but not a comma.
 - **Sent to that host only.** git gets an `Authorization: Basic` header scoped to `https://<host>/`, through `GIT_CONFIG_*` environment variables rather than its command line, which any user's `ps` can read. Only the same user and root can read a process's environment, and the clone's `.git/config` never holds it. The check, the clone and the freshness check all send it.
