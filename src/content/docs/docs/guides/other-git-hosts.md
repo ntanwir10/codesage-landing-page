@@ -1,9 +1,9 @@
 ---
 title: Other git hosts
-description: Add public GitLab, Bitbucket and self-hosted repositories from the dashboard, the REST API or the add_repository tool.
+description: Add GitLab, Bitbucket and self-hosted repositories, public or private with a token, from the dashboard, the REST API or the add_repository tool.
 ---
 
-CodeSage can index a public repository from GitLab, Bitbucket or a self-hosted git server, as well as GitHub. The dashboard's Home form, `POST /api/v1/repositories/` and the `add_repository` MCP tool all take the same URLs and run the same checks. This page covers the URLs they accept, how the backend reads the repository, the links in search results and every refusal message.
+CodeSage can index a repository from GitLab, Bitbucket or a self-hosted git server, as well as GitHub. Public repositories need nothing; private ones need a token for the host in `GIT_HOST_CREDENTIALS` (see [Private repositories](#private-repositories)). The dashboard's Home form, `POST /api/v1/repositories/` and the `add_repository` MCP tool all take the same URLs and run the same checks. This page covers the URLs they accept, how the backend reads the repository, the links in search results and every refusal message.
 
 In the dashboard, paste the URL (for example `https://gitlab.com/group/project`) into the Home page form. Typing `owner/repo` without a host still means GitHub. From your AI assistant, ask something like:
 
@@ -43,15 +43,41 @@ Rules behind the table:
 
 A GitHub repository is named `owner/repo`. Every other repository is named `<host>/<path>`, such as `gitlab.com/group/project`, so names from different hosts can't collide. Pass that name, its numeric ID, or the same name in any letter case as the `repository` argument of the other tools.
 
-## Public repositories only
+## Private repositories
 
-Git can't ask for credentials here, so a repository that needs a login is treated as missing. Private repositories are refused on every host except github.com, where the server's `GITHUB_TOKEN` can read them. The message is:
+Git can't ask for credentials here, so the backend reads them from `GIT_HOST_CREDENTIALS` in `backend/.env`: comma-separated `host=user:token` pairs, one per host. Restart the backend after changing it. github.com keeps `GITHUB_TOKEN` and can't be listed.
+
+```bash
+GIT_HOST_CREDENTIALS=gitlab.com=oauth2:<token>,bitbucket.org=x-token-auth:<token>
+```
+
+A read-only token is enough:
+
+| Host | Entry | Token |
+| --- | --- | --- |
+| GitLab (gitlab.com or self-managed) | `gitlab.com=oauth2:<token>` | A personal, project or group access token with the `read_repository` scope |
+| Bitbucket Cloud | `bitbucket.org=x-token-auth:<token>` | A repository, project or workspace access token with repository read access |
+| Gitea and Forgejo (such as Codeberg) | `codeberg.org=<user>:<token>` | An access token with repository read access |
+
+- **Checked at startup.** A malformed entry, a host listed twice, or `github.com` stops the backend from starting. The error names the entry's position, never its value. The token may contain `=` and `:` but not a comma.
+- **Sent to that host only.** git gets an `Authorization: Basic` header scoped to `https://<host>/`, through `GIT_CONFIG_*` environment variables rather than its command line. `ps` can't show it, and the clone's `.git/config` never holds it. The check, the clone and the freshness check all send it.
+- **No redirects.** With a token, git follows no redirects, so the header can't follow one either. git is given `https://<host>/<path>.git`, because gitlab.com redirects the path without `.git`. A repository that moved must be added at its current address.
+- **One token per host.** It is used for every repository on that host. The dashboard and `add_repository` can't pass a token of their own. A bad token fails that host's public repositories too.
+- **Needs git 2.31 or later**, for the environment variables. The backend images have it.
+
+Without a token, a repository that needs a login is treated as missing:
 
 ```text
 gitlab.com/group/project was not found or is private; only public repositories are supported on gitlab.com.
 ```
 
-A repository that answers `401`, `403` or `404` to git, or prints "authentication failed" or "terminal prompts disabled", is reported this way.
+With one, the same refusal blames the token instead:
+
+```text
+gitlab.com rejected the token in GIT_HOST_CREDENTIALS or it lacks access to group/project.
+```
+
+A repository that answers `401`, `403` or `404` to git, or prints "authentication failed" or "terminal prompts disabled", is reported one of these two ways. A wrong or expired token shows up as git's "could not read Username", because git gets a `401` and can't prompt.
 
 ## Rejected URLs
 
@@ -96,7 +122,9 @@ Git runs without a shell (`create_subprocess_exec`), with no stdin, and is kille
 
 The `ls-remote` and `clone` calls also carry `-c http.curloptResolve=<host>:443:<ip>`, with the address the backend just checked (IPv4 when there is one). git never resolves the name itself, so a DNS answer that changes between the check and the request (DNS rebinding) can't send it elsewhere.
 
-Redirects are still followed, because gitlab.com answers `/group/repo` with a `301` to `/group/repo.git`. git follows that redirect without the address check, so a hostile public host could point it at an internal address. If that matters, route the backend's traffic through an egress proxy that refuses private addresses.
+For a host in `GIT_HOST_CREDENTIALS`, the environment also carries `GIT_CONFIG_COUNT`, `GIT_CONFIG_KEY_n` and `GIT_CONFIG_VALUE_n` with the host's `http.https://<host>/.extraHeader` and `http.followRedirects=false`. `git rev-parse` in the local clone gets neither.
+
+Without a token, redirects are still followed, because gitlab.com answers `/group/repo` with a `301` to `/group/repo.git`. git follows that redirect without the address check, so a hostile public host could point it at an internal address. If that matters, route the backend's traffic through an egress proxy that refuses private addresses. A host with a token gets no redirects.
 
 Symlinks: a clone keeps symlinks as real links. The tree walk doesn't follow or list them, so they are never indexed. (Older notes that mention `core.symlinks=false` are out of date.)
 
@@ -121,7 +149,9 @@ For a non-GitHub URL the check refuses with one of these, and nothing is created
 
 | Message | Cause |
 | --- | --- |
-| `<host>/<path> was not found or is private; only public repositories are supported on <host>.` | The repository doesn't exist, or it needs a login |
+| `<host>/<path> was not found or is private; only public repositories are supported on <host>.` | The repository doesn't exist, or it needs a login and the host has no token in `GIT_HOST_CREDENTIALS` |
+| `<host> rejected the token in GIT_HOST_CREDENTIALS or it lacks access to <path>.` | The host has a token, but it is wrong or expired, can't read the repository, or the repository doesn't exist |
+| `<host> redirected <path>; with a token CodeSage doesn't follow redirects, so use its current address.` | The repository moved; add it at its new URL |
 | `Can't index <host>/<path>: <host> resolves to a private or loopback address.` | The host name resolves to a non-public address (private, loopback, link-local and so on). Status `422` |
 | `Can't index <host>/<path>: <host> could not be resolved.` | The host name doesn't resolve. Status `422` |
 | `Branch '<b>' does not exist in <host>/<path>.` | The branch is missing |
@@ -143,6 +173,7 @@ A repository that passes the check can still fail while it runs. The reason is s
 | `Could not run git to clone <host>/<path>` | `git` isn't installed or couldn't start |
 | `Branch '<b>' not found in <host>/<path>` | The branch disappeared between the check and the clone |
 | `<host>/<path> was not found or is private; only public repositories are supported on <host>` | The repository became private or was removed |
+| `<host> rejected the token in GIT_HOST_CREDENTIALS or it lacks access to <path>` | The host's token was revoked, expired or lost access, or the repository was removed |
 | `Could not clone <host>/<path> from <host>` | Any other clone failure |
 | `No supported code files found in repository` | Nothing in the clone matched the file rules |
 
@@ -150,8 +181,8 @@ Fix the cause and reprocess from the repository page.
 
 ## Limits
 
-- **Public only** on every host except github.com.
-- **Redirects.** git follows a host's first HTTP redirect without re-checking where it points, so a hostile public host could send it to an internal address. Route the backend through an egress proxy that refuses private addresses if that matters.
+- **Private repositories need a server token,** one per host in `GIT_HOST_CREDENTIALS`, shared by every repository on that host.
+- **Redirects.** Without a token, git follows a host's first HTTP redirect without re-checking where it points, so a hostile public host could send it to an internal address. Route the backend through an egress proxy that refuses private addresses if that matters. With a token, no redirect is followed.
 - **Tool limits.** `add_repository` needs the API key like every tool call and counts toward the 30 per minute limit.
 - **Clone size.** A shallow clone of a huge repository must finish in 120 seconds and fit the 1000-file and 100 MB selection.
 

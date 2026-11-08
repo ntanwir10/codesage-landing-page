@@ -640,7 +640,7 @@ Adds a repository by `https` URL and starts indexing it in the background. It wo
 
 The URL is refused if it has a port, credentials, a query or fragment, the host `localhost` (or `*.localhost`), or a private or loopback IP address. A path that is not `owner/repo` (plus a recognised branch suffix) is refused as well. On hosts other than github.com, the host name is also resolved before git runs: if it doesn't resolve, or any address it resolves to is not public, the repository is refused, and git then connects only to the address that was checked.
 
-Private repositories work only on github.com, and only when the server's `GITHUB_TOKEN` can read them. On every other host the repository must be public.
+Private repositories work only when the server has a token that can read them: `GITHUB_TOKEN` on github.com, or the host's entry in `GIT_HOST_CREDENTIALS` elsewhere (see [Private repositories](/docs/guides/other-git-hosts/#private-repositories)). The tool can't pass a token of its own.
 
 ### Result
 
@@ -676,7 +676,9 @@ The pre-flight check allows 10 seconds per request. On GitHub it makes up to two
 | `branch: Invalid branch name` | The branch breaks git's branch-name rules (for example it contains `..`, a space or `~`), or starts with `-` |
 | `octo/demo is already added as repository 1.` | The URL (case-insensitive) already exists |
 | `Search indexing is not configured on the server (Algolia credentials are missing).` | `ALGOLIA_APP_ID` or `ALGOLIA_ADMIN_API_KEY` is unset |
-| `<host>/<path> was not found or is private; only public repositories are supported on <host>.` | Non-GitHub host: the repository is missing or needs credentials |
+| `<host>/<path> was not found or is private; only public repositories are supported on <host>.` | Non-GitHub host without a token: the repository is missing or needs credentials |
+| `<host> rejected the token in GIT_HOST_CREDENTIALS or it lacks access to <path>.` | Non-GitHub host with a token: the token is wrong, expired or can't read the repository, or the repository is missing |
+| `<host> redirected <path>; with a token CodeSage doesn't follow redirects, so use its current address.` | Non-GitHub host with a token: the repository moved |
 | `Can't index <host>/<path>: <host> resolves to a private or loopback address.` or `...: <host> could not be resolved.` | Non-GitHub host: the name points at a non-public address, or doesn't resolve |
 | `GitHub repository octo/demo was not found. Check the URL; if it's private, the server's GITHUB_TOKEN needs access.` | github.com: missing, or private without token access |
 | `GitHub denied access to octo/demo.` | github.com answered 403 |

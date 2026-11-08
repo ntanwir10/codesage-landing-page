@@ -44,12 +44,13 @@ These are limits of the current code, not bugs waiting for a fix. Each row says 
 
 | Limitation | Why | Workaround |
 | --- | --- | --- |
-| **git follows a host's first redirect unchecked** on hosts other than github.com. | The address is checked before git runs, but not where a redirect points | Route the backend through an egress proxy that refuses private addresses |
-| **Other hosts are public only, over https, with no port or credentials.** | Git runs without prompts or a credential helper, so a private repository cannot authenticate | Make the repository public, or mirror it on github.com |
-| **Private repositories work on github.com only**, with one server-wide `GITHUB_TOKEN`. | The token belongs to the server, so every user sees what it can read | Use a token with the narrowest access you can |
+| **git follows a host's first redirect unchecked** on hosts other than github.com that have no token. | The address is checked before git runs, but not where a redirect points | Route the backend through an egress proxy that refuses private addresses. A host in `GIT_HOST_CREDENTIALS` gets no redirects |
+| **Other hosts work over https only, with no port or credentials in the URL.** Private repositories there need a token in `GIT_HOST_CREDENTIALS`. | Git runs without prompts or a credential helper, so a token can only come from the server's settings | Add `host=user:token` for the host; see [Private repositories](/docs/guides/other-git-hosts/#private-repositories) |
+| **Private repositories use one server-wide token per host:** `GITHUB_TOKEN` for github.com, `GIT_HOST_CREDENTIALS` for the rest. | The tokens belong to the server, so every user sees what they can read | Use tokens with the narrowest read-only access you can |
+| **With a token, a moved repository isn't followed.** | Redirects are off so the token header can't follow one | Add the repository at its current URL |
 | **Source links exist for GitHub, GitLab and Bitbucket only.** GitLab means `gitlab.com` or a host starting with `gitlab.`. | The link format is host specific | Other hosts get results without a `url` |
 | **Other hosts need `git` in the image or on the machine.** | The clone uses the git command line | Both backend images install it |
-| **The URL check reads the URL text and does not resolve DNS.** On other hosts, git's redirects are followed unchecked. | The URL check refuses `localhost`, `.localhost` names and non-public IP literals. For other hosts, the git source also resolves the name, refuses any non-public address and pins git to the checked one. But redirects stay on, because gitlab.com answers `/group/repo` with a `301` to `/group/repo.git`, so a hostile public host could redirect git to an internal address | Run CodeSage where it should not reach internal hosts, or restrict egress with a proxy that refuses private addresses |
+| **The URL check reads the URL text and does not resolve DNS.** On other hosts, git's redirects are followed unchecked. | The URL check refuses `localhost`, `.localhost` names and non-public IP literals. For other hosts, the git source also resolves the name, refuses any non-public address and pins git to the checked one. But without a token redirects stay on, because gitlab.com answers `/group/repo` with a `301` to `/group/repo.git`, so a hostile public host could redirect git to an internal address | Run CodeSage where it should not reach internal hosts, or restrict egress with a proxy that refuses private addresses |
 
 ## Security model
 

@@ -373,7 +373,7 @@ Set `MCP_SERVER_URL` and `CODESAGE_API_KEY` in the Inspector's environment field
 - The backend must be running. The bridge doesn't start it.
 - The rate limit is per address, so everything behind one IP shares it, such as nginx in the prod stack.
 - `search_code` without `repository` includes repositories that are being reprocessed.
-- `add_repository` can't read private repositories except on github.com.
+- `add_repository` can't pass a token. Private repositories need the server's `GITHUB_TOKEN` on github.com, or a token for the host in `GIT_HOST_CREDENTIALS` elsewhere.
 
 <LinkCard title="MCP tools reference" description="Every tool, argument, default and limit." href="/docs/reference/mcp-tools/" />
 <LinkCard title="MCP endpoints reference" description="The HTTP endpoints behind the bridge." href="/docs/reference/mcp-endpoints/" />

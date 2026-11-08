@@ -45,7 +45,7 @@ Yes, for public repositories. Without `GITHUB_TOKEN`, GitHub's low unauthenticat
 
 ### Can I index private repositories?
 
-On github.com, yes, if the server's `GITHUB_TOKEN` can read the repository. On GitLab, Bitbucket and self-hosted servers, no: only public repositories are supported because git can't ask for credentials. CodeSage has one shared API key and no per-user permissions, so anyone who can use your instance can search every repository the token reached.
+Yes. On github.com the server's `GITHUB_TOKEN` must be able to read the repository. On GitLab, Bitbucket, Gitea, Forgejo and other hosts, put a read-only token for the host in `GIT_HOST_CREDENTIALS`, such as `gitlab.com=oauth2:<token>`. The [Other git hosts](/docs/guides/other-git-hosts/#private-repositories) guide has the format for each host. CodeSage has one shared API key and no per-user permissions, so anyone who can use your instance can search every repository the tokens reached.
 
 ### Can I use a search-only or restricted Algolia key?
 

@@ -44,6 +44,7 @@ Never commit `backend/.env`. It holds your Algolia admin key and the CodeSage AP
 | `ALGOLIA_ADMIN_API_KEY` | unset | string | Algolia admin key. Required for indexing and search. Never expose it to the browser |
 | `ALGOLIA_INDEX_NAME` | `codesage_code_entities` | string | The index CodeSage writes to. Use one index per database, because records are keyed by repository ID |
 | `GITHUB_TOKEN` | unset | string | Raises the GitHub API rate limit and lets the backend read private github.com repositories. A rejected token makes create return `502` |
+| `GIT_HOST_CREDENTIALS` | unset | comma-separated `host=user:token` | Tokens for private repositories on hosts other than github.com, such as `gitlab.com=oauth2:<token>,bitbucket.org=x-token-auth:<token>`. Formats per host are in [Other git hosts](/docs/guides/other-git-hosts/#private-repositories). Each token is sent as an `Authorization` header to its host only, and that host gets no redirects. A malformed entry, a host listed twice, or `github.com` stops startup, and the error never shows the value. Needs git 2.31 or later |
 
 Without Algolia credentials the backend still starts. Adding or reprocessing a repository returns `503`, MCP search says search is not configured, and `/health` reports `degraded`.
 
